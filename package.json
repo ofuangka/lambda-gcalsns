@@ -1,0 +1,25 @@
+{
+  "name": "lambda-gcalsns",
+  "version": "1.0.0",
+  "description": "Reads Google Calendar event notifications and sends corresponding SNS notifications",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/ofuangka/lambda-gcalsns.git"
+  },
+  "author": "Osha Fuangkasae",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ofuangka/lambda-gcalsns/issues"
+  },
+  "homepage": "https://github.com/ofuangka/lambda-gcalsns#readme",
+  "dependencies": {
+    "aws-sdk": "^2.94.0",
+    "google-auth-library": "^0.10.0",
+    "googleapis": "^20.1.0",
+    "moment-timezone": "^0.5.13"
+  }
+}
