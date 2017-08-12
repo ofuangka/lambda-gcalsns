@@ -17,7 +17,9 @@
   },
   "homepage": "https://github.com/ofuangka/lambda-gcalsns#readme",
   "dependencies": {
+    "aws-sdk": "^2.94.0",
     "google-auth-library": "^0.10.0",
-    "googleapis": "^20.1.0"
+    "googleapis": "^20.1.0",
+    "moment-timezone": "^0.5.13"
   }
 }
