@@ -96,7 +96,13 @@ function listEvents(calendarId, start, end, gcal) {
 function sendNotification(message, phoneNumber, sns) {
     return ((process.env.IS_SMS_ENABLED) ? toPromise(sns.publish, sns, {
         PhoneNumber: phoneNumber,
-        Message: message
+        Message: message,
+        MessageAttributes: {
+            'AWS.SNS.SMS.SMSType': { 
+                DataType: 'String', 
+                StringValue: 'Promotional'
+            }
+        }
     }) : Promise.resolve()).then(_ => `${phoneNumber} -> ${message}`);
 }
 
@@ -123,7 +129,7 @@ function getTimeZone(calendarId, gcal) {
 function toMessage(event, maxChars) {
     var start;
     if (event.start.date) {
-    
+
         /* an all day event */
         start = moment(event.start.date, 'YYYY-MM-DD');
     } else {
@@ -210,7 +216,7 @@ exports.handler = function () {
         });
         verbose('Getting contacts and timeZone');
         return Promise.all([
-            getContacts(contactsId, gcal), 
+            getContacts(contactsId, gcal),
             getTimeZone(calendarId, gcal)
         ]).then(results => {
             var contacts = results[0],
@@ -253,11 +259,15 @@ exports.handler = function () {
                         });
 
                         /* wait for everything to complete, then send the summary. if the count has increased, save the new count */
-                        return Promise.all(asyncLog).then(log => sendSummary(toSummary(log), recipients, from, subject, ses)).then(_ => {
+                        return Promise.all(asyncLog).then(log => {
+                            var completion = [
+                                sendSummary(toSummary(log), recipients, from, subject, ses).catch(err => `Summary send failure: ${err}`)
+                            ];
                             if (newCount > startCount) {
                                 verbose('Saving count');
-                                asyncRet.push(saveMonthNotificationCount(newCount, quotaMonth, dynamodb));
+                                completion.push(saveMonthNotificationCount(newCount, quotaMonth, dynamodb));
                             }
+                            return Promise.all(completion);
                         });
                     });
                 }
