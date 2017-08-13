@@ -126,7 +126,7 @@ function getTimeZone(calendarId, gcal) {
     return getCalendar(calendarId, gcal).then(calendar => calendar.timeZone);
 }
 
-function toMessage(event, maxChars) {
+function toMessage(event, timeZone, maxChars) {
     var start;
     if (event.start.date) {
 
@@ -137,6 +137,8 @@ function toMessage(event, maxChars) {
     }
     if (event.start.timeZone) {
         start.tz(event.start.timeZone);
+    } else {
+        start.tz(timeZone);
     }
 
     /* TODO: use templating */
@@ -241,7 +243,7 @@ exports.handler = function () {
                             var matches = NOTIFICATION_REGEX.exec(event.summary);
                             if (matches) {
                                 var phoneNumber = contacts[matches[1].toLowerCase()],
-                                    message = toMessage(event, maxChars),
+                                    message = toMessage(event, timeZone, maxChars),
                                     sns = new aws.SNS(awsConfig);
                                 if (phoneNumber && message && (newCount < monthlyQuota)) {
 
