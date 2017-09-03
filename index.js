@@ -1,13 +1,50 @@
 var aws = require('aws-sdk'),
     google = require('googleapis'),
     googleAuth = require('google-auth-library'),
-    moment = require('moment-timezone');
+    moment = require('moment-timezone'),
+    calendarId = process.env.CALENDAR_GCAL_ID,
+    contactsId = process.env.CONTACTS_GCAL_ID,
+    from = process.env.EMAIL_FROM,
+    subject = process.env.EMAIL_SUBJECT,
+    smsReplyTo = process.env.SMS_REPLY_TO,
+    awsConfig = {
+        region: process.env.AWS_REGION_ || 'us-east-1',
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID_,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_
+    },
+    credentials = {
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        redirectUrl: process.env.GOOGLE_REDIRECT_URL
+    },
+    googleApiVersion = process.env.GOOGLE_API_VERSION || 'v3',
+    isSmsEnabled = process.env.IS_SMS_ENABLED,
+    isEmailEnabled = process.env.IS_EMAIL_ENABLED,
+    isVerbose = process.env.IS_VERBOSE,
+    friendlyDateFormat = process.env.FRIENDLY_DATE_FORMAT || 'ddd, MMM Do',
+    friendlyTimeFormat = process.env.FRIENDLY_TIME_FORMAT || 'h:mma',
+    smsMessageTmpl = process.env.SMS_MESSAGE_TMPL || 'This message is to confirm {{ eventSummary }} on {{ date }} at {{ time }} for {{ recipientName }}. Please confirm by texting {{ smsReplyTo }} directly.';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'],
     NOTIFICATION_REGEX = /\*([^\*]+)\*/,
+    TMPL_VAR_REGEX = /\{\{\s*([A-Z0-9_]+)\s*\}\}/ig,
     MONTH_NOTIFICATION_COUNT_TABLE = 'MonthNotificationCount',
     TOKEN_TABLE = 'Token',
-    GCAL_TOKEN_ID = 'gcalsns-google';
+    GCAL_TOKEN_ID = 'gcalsns-google',
+    DEFAULT_MONTHLY_QUOTA = '100',
+    DEFAULT_SMS_MAX_CHARS = '140';
+
+function assign(target) {
+    for (var i = 1; i < arguments.length; i++) {
+        var source = arguments[i];
+        for (var nextKey in source) {
+            if (source.hasOwnProperty(nextKey)) {
+                target[nextKey] = source[nextKey];
+            }
+        }
+    }
+    return target;
+}
 
 /**
  * Makes an asynchronous function return a ES6 Promise 
@@ -29,24 +66,30 @@ function toPromise(fn, context) {
 }
 
 /**
- * Logs to the console if the IS_VERBOSE environment variables is truthy
- * 
- * @param {string} message 
+ * logs to the console, calling JSON.stringify on objects
  */
-function verbose(message) {
-    if (process.env.IS_VERBOSE) {
-        console.log(message);
+function log() {
+    console.log.apply(console, Array.prototype.map.call(arguments, argument => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+}
+
+/**
+ * calls log if isVerbose is true
+ */
+function verbose() {
+    if (isVerbose) {
+        log.apply(null, arguments);
     }
 }
+
 
 /**
  * Retrieves the MonthNotificationCount
  * 
  * @param {string} month The month to retrieve, in the format YYYY-MM 
- * @param {object} db The database object
+ * @param {object} dynamodb The database object
  */
-function fetchMonthNotificationCount(month, db) {
-    return toPromise(db.get, db, {
+function fetchMonthNotificationCount(month, dynamodb) {
+    return toPromise(dynamodb.get, dynamodb, {
         Key: {
             Month: month
         },
@@ -59,10 +102,10 @@ function fetchMonthNotificationCount(month, db) {
  * 
  * @param {number} count The count to save 
  * @param {string} month The month to save, in the format YYYY-MM 
- * @param {object} db The database object
+ * @param {object} dynamodb The database object
  */
-function saveMonthNotificationCount(count, month, db) {
-    return toPromise(db.put, db, {
+function saveMonthNotificationCount(count, month, dynamodb) {
+    return toPromise(dynamodb.put, dynamodb, {
         TableName: MONTH_NOTIFICATION_COUNT_TABLE,
         Item: {
             Month: month,
@@ -72,12 +115,12 @@ function saveMonthNotificationCount(count, month, db) {
 }
 
 /**
- * Retrieves the Token
+ * Retrieves the Google Calendar API token
  * 
- * @param {object} db The database object 
+ * @param {object} dynamodb The database object 
  */
-function fetchToken(db) {
-    return toPromise(db.get, db, {
+function fetchGcalToken(dynamodb) {
+    return toPromise(dynamodb.get, dynamodb, {
         Key: {
             TokenId: GCAL_TOKEN_ID
         },
@@ -86,17 +129,17 @@ function fetchToken(db) {
 }
 
 /**
- * Saves the Token
+ * Saves the Google Calendar API token
  * 
- * @param {object} token The token 
- * @param {object} db The database object
+ * @param {object} gcalToken The token 
+ * @param {object} dynamodb The database object
  */
-function saveToken(token, db) {
-    return toPromise(db.put, db, {
+function saveToken(gcalToken, dynamodb) {
+    return toPromise(dynamodb.put, dynamodb, {
         TableName: TOKEN_TABLE,
         Item: {
             TokenId: GCAL_TOKEN_ID,
-            Content: token
+            Content: gcalToken
         }
     });
 }
@@ -104,16 +147,16 @@ function saveToken(token, db) {
 /**
  * Authenticates against Google OAuth2
  * 
- * @param {object} credentials 
- * @param {object} token 
+ * @param {object} gcalCredentials 
+ * @param {object} gcalToken 
  */
-function authorize(credentials, token) {
+function authorize(gcalCredentials, gcalToken) {
     var auth = new googleAuth();
-    var ret = new auth.OAuth2(credentials.clientId, credentials.clientSecret, credentials.redirectUrl);
+    var ret = new auth.OAuth2(gcalCredentials.clientId, gcalCredentials.clientSecret, gcalCredentials.redirectUrl);
     ret.setCredentials({
-        access_token: token.access_token,
-        refresh_token: token.refresh_token,
-        expiry_date: token.expiry_date
+        access_token: gcalToken.access_token,
+        refresh_token: gcalToken.refresh_token,
+        expiry_date: gcalToken.expiry_date
     });
     return ret;
 }
@@ -131,6 +174,7 @@ function getCalendar(calendarId, gcal) {
 }
 
 /**
+ * Lists the events of a Google Calendar for a given time period
  * 
  * @param {string} calendarId The calendar to retrieve events for
  * @param {string} start The timeMin, in ISOString format
@@ -154,8 +198,8 @@ function listEvents(calendarId, start, end, gcal) {
  * @param {string} phoneNumber The phone number to send to (only US phone numbers supported)
  * @param {object} sns The AWS.SNS object
  */
-function sendNotification(message, phoneNumber, sns) {
-    return ((process.env.IS_SMS_ENABLED) ? toPromise(sns.publish, sns, {
+function sendSmsNotification(message, phoneNumber, sns) {
+    return toPromise(sns.publish, sns, {
         PhoneNumber: phoneNumber,
         Message: message,
         MessageAttributes: {
@@ -164,7 +208,7 @@ function sendNotification(message, phoneNumber, sns) {
                 StringValue: 'Promotional'
             }
         }
-    }) : Promise.resolve()).then(() => `${phoneNumber} -> ${message}`);
+    });
 }
 
 /**
@@ -175,7 +219,7 @@ function sendNotification(message, phoneNumber, sns) {
 function parseContacts(s) {
     var ret = {};
     if (typeof s === 'string') {
-        s.split('\n').map(line => (typeof line === 'string') ? line.split(':') : null).forEach(kv => {
+        s.split(/\n+/).map(line => (typeof line === 'string') ? line.split(':') : null).forEach(kv => {
             if (kv && kv.length > 1) {
                 ret[kv[0].trim().toLowerCase()] = toPhoneNumber(kv[1]);
             }
@@ -192,30 +236,37 @@ function getTimeZone(calendarId, gcal) {
     return getCalendar(calendarId, gcal).then(calendar => calendar.timeZone);
 }
 
+function interpolate(tmpl, context) {
+    var matches,
+        ret = tmpl;
+    while ((matches = TMPL_VAR_REGEX.exec(tmpl)) !== null) {
+        ret = ret.replace(matches[0], context[matches[1]] || '?');
+    }
+    return ret;
+}
+
 /**
  * Generates a message for an event in a given timeZone, limiting the characters
  * 
  * @param {object} event A Google Calendar event 
- * @param {string} timeZone The timeZone of the Google Calendar
+ * @param {string} calTimeZone The timeZone of the Google Calendar
+ * @param {object} context The context to use when interpolating the message template
  * @param {number} maxChars The maximum allowed characters in the message 
  */
-function toMessage(event, timeZone, maxChars) {
-    var start;
-    if (event.start.date) {
-
+function toMessage(event, calTimeZone, context, maxChars) {
+    var start,
+        timeZone = event.start.timeZone || calTimeZone;
+    if (event.start.date) { 
+        
         /* an all day event */
-        start = moment(event.start.date, 'YYYY-MM-DD');
+        start = moment.tz(event.start.date, 'YYYY-MM-DD', timeZone).startOf('day');
     } else {
-        start = moment(event.start.dateTime, moment.ISO_8601);
+        start = moment(event.start.dateTime, moment.ISO_8601).tz(timeZone);
     }
-    if (event.start.timeZone) {
-        start.tz(event.start.timeZone);
-    } else {
-        start.tz(timeZone);
-    }
-
-    /* TODO: use templating */
-    return ('Reminder: ' + start.format('h:mma') + ' ' + event.summary.replace(NOTIFICATION_REGEX, '').trim()).substr(0, maxChars);
+    return interpolate(smsMessageTmpl, assign({
+        date: start.format(friendlyDateFormat),
+        time: start.format(friendlyTimeFormat)
+    }, context)).substr(0, maxChars);
 }
 
 /**
@@ -224,9 +275,7 @@ function toMessage(event, timeZone, maxChars) {
  * @param {object} log An array of logs 
  */
 function toSummary(log) {
-
-    /* TODO: implement */
-    return JSON.stringify(log);
+    return `<h1>${log[0]}</h1><ul>${log.slice(1).map(item => `<li>${item}</li>`).join('')}</ul>`;
 }
 
 /**
@@ -238,35 +287,29 @@ function toSummary(log) {
  * @param {string} subject The email subject
  * @param {object} ses An AWS.SES object
  */
-function sendSummary(summary, recipients, from, subject, ses) {
-    if (process.env.IS_EMAIL_ENABLED) {
-        return toPromise(ses.sendEmail, ses, {
-            Destination: {
-                ToAddresses: recipients,
-            },
-            Message: {
-                Body: {
-                    Text: {
-                        Data: summary
-                    }
-                },
-                Subject: {
-                    Data: subject
+function sendSummaryEmail(summary, recipients, from, subject, ses) {
+    return toPromise(ses.sendEmail, ses, {
+        Destination: {
+            ToAddresses: recipients,
+        },
+        Message: {
+            Body: {
+                Html: {
+                    Data: summary
                 }
             },
-            Source: from
-        });
-    }
-
-    /* email disabled, just log */
-    console.log(summary);
-    return Promise.resolve();
+            Subject: {
+                Data: subject
+            }
+        },
+        Source: from
+    });
 }
 
 /**
  * Attempts to parse a phone number from a string
  * 
- * @param {string} s A phone number 
+ * @param {string} s A phone number
  */
 function toPhoneNumber(s) {
     if (typeof s === 'string') {
@@ -281,31 +324,15 @@ function toPhoneNumber(s) {
 }
 
 exports.handler = function () {
-    verbose('Reading environment variables');
-    var calendarId = process.env.CALENDAR_GCAL_ID,
-        contactsId = process.env.CONTACTS_GCAL_ID,
-        monthlyQuota = parseInt(process.env.SMS_MONTHLY_QUOTA),
-        maxChars = parseInt(process.env.SMS_MAX_CHARS),
-        recipients = process.env.EMAIL_RECIPIENTS.split(',').map(s => s.trim()),
-        from = process.env.EMAIL_FROM,
-        subject = process.env.EMAIL_SUBJECT,
-        awsConfig = {
-            region: process.env.AWS_REGION_ || 'us-east-1',
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID_,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY_
-        },
+    var monthlyQuota = parseInt(process.env.SMS_MONTHLY_QUOTA || DEFAULT_MONTHLY_QUOTA),
+        maxChars = parseInt(process.env.SMS_MAX_CHARS || DEFAULT_SMS_MAX_CHARS),
+        recipients = (process.env.EMAIL_RECIPIENTS || '').split(',').map(s => s.trim()),
         dynamodb = new aws.DynamoDB.DocumentClient(awsConfig),
-        credentials = {
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            redirectUrl: process.env.GOOGLE_REDIRECT_URL
-        },
-        googleApiVersion = process.env.GOOGLE_API_VERSION || 'v3',
         now = moment(),
         quotaMonth = now.format('YYYY-MM'),
         smsDelta = 0;
     verbose('Fetching token');
-    fetchToken(dynamodb)
+    fetchGcalToken(dynamodb)
         .then(token => authorize(credentials, token))
         .then(auth => {
             var gcal = google.calendar({
@@ -324,17 +351,17 @@ exports.handler = function () {
                 timeZone = results[3],
                 nowTz = now.tz(timeZone),
                 ymd = [nowTz.year(), nowTz.month(), nowTz.date()],
-                bod = moment.tz(ymd, timeZone).toISOString(),
-                eod = moment.tz(ymd.concat([23, 59, 59, 999]), timeZone).toISOString();
-            verbose(`contacts(${JSON.stringify(contacts)}), timeZone(${timeZone})`);
-            verbose(`now(${now}), nowTz(${nowTz}), bod(${bod}), eod(${eod})`);
+                bod = moment.tz(ymd, timeZone).startOf('day').toISOString(),
+                eod = moment.tz(ymd, timeZone).endOf('day').toISOString();
+            verbose('contacts:', contacts, 'timeZone:', timeZone);
+            verbose('now:', now, 'nowTz:', nowTz, 'bod:', bod, 'eod:', eod);
             return Promise.all([
                 auth,
                 gcal,
                 contacts,
                 timeZone,
                 nowTz,
-                listEvents(calendarId, bod, eod, gcal), 
+                listEvents(calendarId, bod, eod, gcal),
                 fetchMonthNotificationCount(quotaMonth, dynamodb)
             ]);
         }).then(results => {
@@ -345,28 +372,40 @@ exports.handler = function () {
                 nowTz = results[4],
                 events = results[5],
                 smsStart = results[6],
-                asyncLog = [auth, smsStart, `Summary for ${nowTz.toString()}`];
+                sns = new aws.SNS(awsConfig),
+                asyncLog = [`Summary for ${nowTz.toString()}`];
             if (events.length == 0) {
                 asyncLog.push('No upcoming events found');
             } else {
                 events.forEach(event => {
                     var matches = NOTIFICATION_REGEX.exec(event.summary);
                     if (matches) {
-                        var phoneNumber = contacts[matches[1].toLowerCase()],
-                            message = toMessage(event, timeZone, maxChars),
-                            sns = new aws.SNS(awsConfig);
+                        var recipientName = matches[1],
+                            phoneNumber = contacts[recipientName.toLowerCase()],
+                            message = toMessage(event, timeZone, {
+                                eventSummary: event.summary.replace(NOTIFICATION_REGEX, '').trim(),
+                                recipientName: recipientName, 
+                                smsReplyTo: smsReplyTo
+                            }, maxChars);
+
                         if (phoneNumber && message && ((smsStart + smsDelta) < monthlyQuota)) {
 
-                            /* try to send the notification. if it is successful, increment the count. otherwise log the failure */
-                            asyncLog.push(sendNotification(message, phoneNumber, sns).catch(err => {
-                                
-                                /* we'll remove what was added to try to keep the count accurate */
-                                smsDelta--;
-                                return `Notification send failure: ${err}`; 
-                            }));
-                            smsDelta++;
+                            if (isSmsEnabled) {
+
+                                /* try to send the notification. if it is successful, increment the count. otherwise log the failure */
+                                asyncLog.push(sendSmsNotification(message, phoneNumber, sns)
+                                    .then(() => {
+                                        smsDelta++;
+                                        return `SMS sent to ${phoneNumber}: ${message}`;
+                                    })
+                                    .catch(err => {
+                                        return `SMS to ${phoneNumber} failed: ${JSON.stringify(err)}`;
+                                    }));
+                            } else {
+                                asyncLog.push(`Simulate SMS to ${phoneNumber}: ${message}`);
+                            }
                         } else {
-                            asyncLog.push(`Invalid notification parameters: contact(${matches[1]}), phone(${phoneNumber}), message(${message}), monthlyQuotaReached(${(smsStart + smsDelta) >= monthlyQuota})`);
+                            asyncLog.push(`Invalid notification parameters: contact(${recipientName}), phone(${phoneNumber}), message(${message}), monthlyQuotaReached(${(smsStart + smsDelta) >= monthlyQuota})`);
                         }
                     } else {
                         asyncLog.push(`Non-notification event: ${event.summary}`);
@@ -375,28 +414,31 @@ exports.handler = function () {
             }
 
             /* wait for everything to complete, then send the summary. if the count has increased, save the new count */
-            return Promise.all(asyncLog);
+            return Promise.all([auth, smsStart].concat(asyncLog));
         }).then(results => {
             var ses = new aws.SES(awsConfig),
                 auth = results[0],
                 smsStart = results[1],
-                log = results.slice(2);
-                completion = [
-                    auth,
-                    sendSummary(toSummary(log), recipients, from, subject, ses).catch(err => `Summary send failure: ${err}`)
-                ];
+                asyncLog = results.slice(2),
+                summary = toSummary(asyncLog),
+                finalizationActions = [];
+            if (isEmailEnabled) {
+                verbose('Sending summary email');
+                finalizationActions.push(sendSummaryEmail(summary, recipients, from, subject, ses));
+            } else {
+                log('Simulate sending summary email');
+                log(summary);
+            }
             if (smsDelta > 0) {
                 verbose('Saving new count');
-                completion.push(saveMonthNotificationCount(smsStart + smsDelta, quotaMonth, dynamodb));
+                finalizationActions.push(saveMonthNotificationCount(smsStart + smsDelta, quotaMonth, dynamodb));
             }
-            return Promise.all(completion);
-        }).then(results => {
-            var auth = results[0];
-            
+
             /* resave the token if an automatic refresh occurred */
             if (auth.credentials.id_token) {
                 verbose('Saving refreshed token');
-                return saveToken(auth.credentials, dynamodb);
+                finalizationActions.push(saveToken(auth.credentials, dynamodb));
             }
+            return Promise.all(finalizationActions);
         }).catch(err => { throw err });
 };
