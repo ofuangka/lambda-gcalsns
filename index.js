@@ -419,9 +419,11 @@ exports.handler = function () {
             var ses = new aws.SES(awsConfig),
                 auth = results[0],
                 smsStart = results[1],
-                asyncLog = results.slice(2),
-                summary = toSummary(asyncLog),
+                summaryLog = results.slice(2),
+                summary,
                 finalizationActions = [];
+            summaryLog.push(`${smsStart + smsDelta} of ${monthlyQuota} SMS sent for ${now.format('MMM YYYY')}`);
+            summary = toSummary(summaryLog);
             if (isEmailEnabled) {
                 verbose('Sending summary email');
                 finalizationActions.push(sendSummaryEmail(summary, recipients, from, subject, ses));
