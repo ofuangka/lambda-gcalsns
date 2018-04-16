@@ -3,7 +3,7 @@ var aws = require('aws-sdk'),
     googleAuth = require('google-auth-library'),
     moment = require('moment-timezone'),
     calendarId = process.env.CALENDAR_GCAL_ID,
-    contactsId = process.env.CONTACTS_GCAL_ID,
+    contactsId = process.env.CONTACTS_SHEETS_ID,
     from = process.env.EMAIL_FROM,
     subject = process.env.EMAIL_SUBJECT,
     smsReplyTo = process.env.SMS_REPLY_TO,
@@ -17,15 +17,17 @@ var aws = require('aws-sdk'),
         clientId: process.env.GOOGLE_CLIENT_ID,
         redirectUrl: process.env.GOOGLE_REDIRECT_URL
     },
-    googleApiVersion = process.env.GOOGLE_API_VERSION || 'v3',
+    googleCalendarApiVersion = process.env.GOOGLE_CALENDAR_API_VERSION || 'v3',
+    googleSheetsApiVersion = process.env.GOOGLE_SHEETS_API_VERSION || 'v4',
     isSmsEnabled = process.env.IS_SMS_ENABLED,
     isEmailEnabled = process.env.IS_EMAIL_ENABLED,
     isVerbose = process.env.IS_VERBOSE,
+    spreadsheetRange = 'A:B',
     friendlyDateFormat = process.env.FRIENDLY_DATE_FORMAT || 'ddd, MMM Do',
     friendlyTimeFormat = process.env.FRIENDLY_TIME_FORMAT || 'h:mma',
     smsMessageTmpl = process.env.SMS_MESSAGE_TMPL || 'This message is to confirm {{ eventSummary }} on {{ date }} at {{ time }} for {{ recipientName }}. Please confirm by texting {{ smsReplyTo }} directly.';
 
-const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'],
+const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/spreadsheets.readonly'],
     NOTIFICATION_REGEX = /\*([^\*]+)\*/,
     TMPL_VAR_REGEX = /\{\{\s*([A-Z0-9_]+)\s*\}\}/ig,
     MONTH_NOTIFICATION_COUNT_TABLE = 'MonthNotificationCount',
@@ -214,22 +216,25 @@ function sendSmsNotification(message, phoneNumber, sns) {
 /**
  * Generates a JavaScript object map of contacts to phone numbers
  * 
- * @param {string} s A newline separated string of key:value pairs 
+ * @param range {object} A google ValueRange 
  */
-function parseContacts(s) {
+function parseContacts(range) {
     var ret = {};
-    if (typeof s === 'string') {
-        s.split(/\n+/).map(line => (typeof line === 'string') ? line.split(':') : null).forEach(kv => {
-            if (kv && kv.length > 1) {
-                ret[kv[0].trim().toLowerCase()] = toPhoneNumber(kv[1]);
-            }
-        });
-    }
+    range.values.forEach(columns => {
+        ret[columns[0].trim().toLowerCase()] = toPhoneNumber(columns[1]);
+    });
     return ret;
 }
 
-function getContacts(calendarId, gcal) {
-    return getCalendar(calendarId, gcal).then(calendar => parseContacts(calendar.description));
+function getContacts(sheetsId, sheets) {
+    return getSheetRange(sheetsId, sheets).then(range => parseContacts(range));
+}
+
+function getSheetRange(sheetsId, sheets) {
+return toPromise(sheets.spreadsheets.values.get, sheets.spreadsheets.values, {
+        spreadsheetId: sheetsId,
+        range: spreadsheetRange
+    });
 }
 
 function getTimeZone(calendarId, gcal) {
@@ -336,12 +341,16 @@ exports.handler = function () {
         .then(token => authorize(credentials, token))
         .then(auth => {
             var gcal = google.calendar({
-                version: googleApiVersion,
+                version: googleCalendarApiVersion,
+                auth: auth
+            });
+            var sheets = google.sheets({
+                version: googleSheetsApiVersion,
                 auth: auth
             });
             verbose('Getting contacts and timeZone');
             return Promise.all([auth, gcal,
-                getContacts(contactsId, gcal),
+                getContacts(contactsId, sheets),
                 getTimeZone(calendarId, gcal)
             ]);
         }).then(results => {
