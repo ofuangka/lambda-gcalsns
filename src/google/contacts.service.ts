@@ -29,9 +29,11 @@ export class ContactsService {
    */
   private parseContacts(range: sheets_v4.Schema$ValueRange): { [key: string]: string } {
     var ret: { [key: string]: string } = {};
-    (range.values || []).forEach(columns => {
-      ret[columns[0].trim().toLowerCase()] = this.formatPhone(columns[1]);
-    });
+    (range.values || [])
+      .filter(columns => !!columns && columns.length > 1 && !!columns[0] && !!columns[1])
+      .forEach(columns => {
+        ret[columns[0].trim().toLowerCase()] = this.formatPhone(columns[1]);
+      });
     ContactsService.log.verbose('parseContacts:', ret);
     return ret;
   }
