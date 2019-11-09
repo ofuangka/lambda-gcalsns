@@ -78,7 +78,7 @@ export class AppContext {
   appStart = moment();
 
   constructor(public config: AppConfig, private lf: LoggerFactory) {
-    this.log = lf.getLogger(`${this}`);
+    this.log = lf.getLogger('AppContext');
     this.dynamodb = new DynamoDB.DocumentClient({
       accessKeyId: this.config.aws.accessKeyId,
       region: this.config.aws.region,
@@ -160,7 +160,7 @@ export class AppContext {
   }
 
   private async processEvent(event: calendar_v3.Schema$Event): Promise<string> {
-    this.log.verbose(`Processing ${JSON.stringify(event)}...`);
+    this.log.verbose(`Processing ${event.summary}...`);
     try {
       const eventInfo = this.readEventInfo(event);
 
