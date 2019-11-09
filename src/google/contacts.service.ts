@@ -1,15 +1,15 @@
 import { OAuth2Client } from "googleapis-common";
-import { AppCfg } from "../app-cfg";
 import { sheets_v4, google } from "googleapis";
-import { Logger } from "../logger";
+import { AppContext } from "../app-ctx";
+import { Logger } from "../util/logger";
 
 export class ContactsService {
 
-  private static log = Logger.getLogger('ContactsService');
-
+  private log: Logger;
   private sheets: sheets_v4.Sheets;
 
-  constructor(auth: OAuth2Client, private cfg: AppCfg) {
+  constructor(auth: OAuth2Client, private context: AppContext) {
+    this.log = context.getLogger('ContactsService');
     this.sheets = google.sheets({
       version: 'v4',
       auth: auth
@@ -17,8 +17,8 @@ export class ContactsService {
   }
 
   getContacts(sheetsId: string): Promise<{ [key: string]: string }> {
-    ContactsService.log.info(`Retrieving contacts...`);
-    ContactsService.log.verbose(`sheetsId: ${sheetsId}`);
+    this.log.info(`Retrieving contacts...`);
+    this.log.verbose(`sheetsId: ${sheetsId}`);
     return this.getSheetRange(sheetsId).then(range => this.parseContacts(range));
   }
 
@@ -30,19 +30,18 @@ export class ContactsService {
   private parseContacts(range: sheets_v4.Schema$ValueRange): { [key: string]: string } {
     var ret: { [key: string]: string } = {};
     (range.values || [])
-      .filter(columns => !!columns && columns.length > 1 && !!columns[0] && !!columns[1])
       .forEach(columns => {
         ret[columns[0].trim().toLowerCase()] = this.formatPhone(columns[1]);
       });
-    ContactsService.log.verbose('parseContacts:', ret);
+    this.log.verbose('parseContacts:', ret);
     return ret;
   }
 
   private getSheetRange(sheetsId: string): Promise<sheets_v4.Schema$ValueRange> {
-    ContactsService.log.verbose(`Google Sheets request for ${sheetsId}...`);
+    this.log.verbose(`Google Sheets request for ${sheetsId}...`);
     return this.sheets.spreadsheets.values.get({
       spreadsheetId: sheetsId,
-      range: this.cfg.google.spreadsheetRange
+      range: this.context.config.google.spreadsheetRange
     })
       .then(response => response.data);
   }

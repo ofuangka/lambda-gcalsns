@@ -1,112 +1,120 @@
 import { google, calendar_v3 } from "googleapis";
 import { DynamoDB } from "aws-sdk";
+import { Credentials, OAuth2Client } from "google-auth-library";
+import moment from 'moment-timezone';
 import { MonthlySmsCountDatastoreService } from "./aws/monthly-sms-count-datastore.service";
 import { GoogleAuthToken, GoogleAuthTokenDatastoreService } from "./aws/google-auth-token-datastore.service";
-import { AppCfg } from "./app-cfg";
 import { EmailService } from "./aws/email.service";
 import { SmsService } from "./aws/sms.service";
-import { Logger } from "./logger";
+import { Logger, LoggerFactory } from "./util/logger";
 import { ContactsService } from "./google/contacts.service";
 import { ScheduleService } from "./google/schedule.service";
-import { Credentials, OAuth2Client } from "google-auth-library";
 
 const EVENT_SUMMARY_REGEX = /\*([^\*]+)\*/;
+const TMPL_VAR_REGEX = /\{\{\s*([A-Z0-9_]+)\s*\}\}/ig;
 
 type PhoneBook = { [key: string]: string };
 
+interface AppConfig {
+  verbose: boolean,
+  email: {
+    enabled: boolean,
+    from: string,
+    subject: string,
+    recipients: string
+  },
+  sms: {
+    enabled: boolean,
+    replyTo: string,
+    monthlyQuota: number,
+    maxChars: number,
+    dateFormat: string,
+    timeFormat: string,
+    template: string
+  },
+  aws: {
+    region: string,
+    accessKeyId: string,
+    secretAccessKey: string
+  },
+  google: {
+    calendarId: string,
+    clientSecret: string,
+    clientId: string,
+    redirectUrl: string,
+    contactsId: string,
+    spreadsheetRange: string,
+  }
+}
+
+interface EventInfo {
+  contactName: string;
+  eventName: string;
+  textMessage: string;
+  phoneNumber: string;
+}
+
 export class AppContext {
 
-  private static log = Logger.getLogger('AppContext');
+  private log: Logger;
 
-  private _authToken: Promise<GoogleAuthToken> | undefined;
-  private _auth: OAuth2Client | undefined;
-  private _emailService: EmailService | undefined;
-  private _smsService: SmsService | undefined;
-  private _contactsService: ContactsService | undefined;
-  private _scheduleService: ScheduleService | undefined;
+  private auth: OAuth2Client | undefined;
+  private contactsService: ContactsService | undefined;
+  private scheduleService: ScheduleService | undefined;
 
   private dynamodb: DynamoDB.DocumentClient;
-  private smsCountDb: MonthlySmsCountDatastoreService;
-  private googleTokenDb: GoogleAuthTokenDatastoreService;
+  private smsCountDb: MonthlySmsCountDatastoreService | undefined;
+  private googleTokenDb: GoogleAuthTokenDatastoreService | undefined;
+
+  private emailService: EmailService | undefined;
+  private smsService: SmsService | undefined;
+
   private phoneBook: PhoneBook = {};
   private todaysEvents: calendar_v3.Schema$Event[] = [];
-  private oldCount: number = 0;
+  private oldCount = 0;
   private sentCount = 0;
   private appEvents: string[] = [];
 
-  get authToken(): Promise<GoogleAuthToken> {
-    if (!this._authToken) {
-      this._authToken = this.googleTokenDb.getToken();
-    }
-    return this._authToken;
-  }
+  appStart = moment();
 
-  get auth(): Promise<OAuth2Client> {
-    if (!this._auth) {
-      return this.authToken
-        .then(token => {
-          const auth = new google.auth.OAuth2(this.cfg.google.clientId, this.cfg.google.clientSecret, this.cfg.google.redirectUrl);
-          google.options({ auth: auth });
-          auth.setCredentials({
-            access_token: token.access_token,
-            refresh_token: token.refresh_token,
-            expiry_date: token.expiry_date
-          });
-          return this._auth = auth;
-        });
-    }
-    return Promise.resolve(this._auth);
-  }
-
-  get emailService(): Promise<EmailService> {
-    if (!this._emailService) {
-      return Promise.resolve(this._emailService = new EmailService(this.cfg));
-    }
-    return Promise.resolve(this._emailService);
-  }
-
-  get smsService(): Promise<SmsService> {
-    if (!this._smsService) {
-      return Promise.resolve(this._smsService = new SmsService(this.cfg));
-    }
-    return Promise.resolve(this._smsService);
-  }
-
-  get contactsService(): Promise<ContactsService> {
-    if (!this._contactsService) {
-      return this.auth.then(auth => this._contactsService = new ContactsService(auth, this.cfg));
-    }
-    return Promise.resolve(this._contactsService);
-  }
-
-  get scheduleService(): Promise<ScheduleService> {
-    if (!this._scheduleService) {
-      return this.auth.then(auth => this._scheduleService = new ScheduleService(auth, this.cfg));
-    }
-    return Promise.resolve(this._scheduleService);
-  }
-
-  constructor(public cfg: AppCfg) {
+  constructor(public config: AppConfig, private lf: LoggerFactory) {
+    this.log = lf.getLogger(`${this}`);
     this.dynamodb = new DynamoDB.DocumentClient({
-      accessKeyId: this.cfg.aws.accessKeyId,
-      region: this.cfg.aws.region,
-      secretAccessKey: this.cfg.aws.secretAccessKey
+      accessKeyId: this.config.aws.accessKeyId,
+      region: this.config.aws.region,
+      secretAccessKey: this.config.aws.secretAccessKey
     });
-    this.googleTokenDb = new GoogleAuthTokenDatastoreService(this.dynamodb);
-    this.smsCountDb = new MonthlySmsCountDatastoreService(this.dynamodb, this.cfg);
+  }
+
+  async initialize(): Promise<AppContext> {
+    this.googleTokenDb = new GoogleAuthTokenDatastoreService(this.dynamodb, this);
+    this.smsCountDb = new MonthlySmsCountDatastoreService(this.dynamodb, this);
+    this.emailService = new EmailService(this);
+    this.smsService = new SmsService(this);
+    return this.googleTokenDb.getToken()
+      .then(token => {
+        this.auth = new google.auth.OAuth2(this.config.google.clientId, this.config.google.clientSecret, this.config.google.redirectUrl);
+        google.options({ auth: this.auth });
+        this.auth.setCredentials({
+          access_token: token.access_token,
+          refresh_token: token.refresh_token,
+          expiry_date: token.expiry_date
+        });
+        this.contactsService = new ContactsService(this.auth, this);
+        this.scheduleService = new ScheduleService(this.auth, this);
+      })
+      .then(() => this);
   }
 
   /**
    * Fetches prerequisite data (the phonebook and today's schedule)
    */
   async fetchData(): Promise<AppContext> {
-    AppContext.log.info(`Fetching data...`);
+    this.log.info(`Fetching data...`);
     await Promise.all([
-      this.contactsService
-        .then(contactsService => contactsService.getContacts(this.cfg.google.contactsId))
+      this.contactsService!.getContacts(this.config.google.contactsId)
         .then(phoneBook => this.phoneBook = phoneBook),
-      this.scheduleService
-        .then(scheduleService => scheduleService.getTodaysEvents(this.cfg.google.calendarId))
+      this.scheduleService!.getTodaysEvents(this.config.google.calendarId)
         .then(todaysEvents => this.todaysEvents = todaysEvents)
     ]);
     return this;
@@ -116,85 +124,102 @@ export class AppContext {
    * Processes the events
    */
   async processEvents(): Promise<AppContext> {
-    AppContext.log.info(`Processing events...`);
+    this.log.info(`Processing events...`);
     if (!this.todaysEvents || !this.phoneBook) {
       throw new Error(`processData() without events or phoneBook, was fetchData() called? (phoneBook: ${this.phoneBook}, todaysEvents ${this.todaysEvents})`);
     }
     if (this.todaysEvents.length > 0) {
-      try {
-        await this.todaysEvents
-          .map(event => this.processEvent(event))
-          .forEach(async (result) => this.appEvents.push(await result));
-        return this;
-      } finally {
-        await this.smsCountDb.updateCount(this.oldCount + this.sentCount);
-      }
+      return Promise.all(this.todaysEvents
+        .map(event => this.processEvent(event)))
+        .then(results => results.forEach(result => this.appEvents.push(result)))
+        .then(() => this);
     }
     this.appEvents.push(`No upcoming events for today`);
     return this;
   }
 
+  async finalize(): Promise<string[]> {
+    this.log.info('Finalizing...');
+    return Promise.all([
+      this.smsCountDb!.updateCount(this.oldCount + this.sentCount).then(result => `Stored updated ${result.month} SMS count ${result.count}`),
+      this.emailService!.sendHtmlEmail(this.summarizeAppEvents(this.appEvents)),
+      this.updateTokenOnRefresh(this.auth!.credentials)
+    ]);
+  }
+
+  /**
+   * Retrieves a Logger given an id
+   * @param id The Logger id to retrieve
+   */
+  getLogger(id: string): Logger {
+    return this.lf.getLogger(id);
+  }
+
   private monthlyQuotaReached(): boolean {
-    return !((this.oldCount + this.sentCount) < this.cfg.sms.monthlyQuota);
+    return !((this.oldCount + this.sentCount) < this.config.sms.monthlyQuota);
   }
 
   private async processEvent(event: calendar_v3.Schema$Event): Promise<string> {
-    const eventSummary = event.summary || '';
-    if (eventSummary.length == 0) {
-      return `Empty eventSummary for event ${event}`;
-    }
-    const parsedSummary = this.parseEventSummary(eventSummary);
-    if (parsedSummary && parsedSummary.contactName && parsedSummary.message) {
-
-      /* look up the phone number */
-      const phoneNumber = this.phoneBook[parsedSummary.contactName];
+    this.log.verbose(`Processing ${JSON.stringify(event)}...`);
+    try {
+      const eventInfo = this.readEventInfo(event);
 
       /* before we send an SMS, make sure the quota hasn't been reached */
       if (!this.monthlyQuotaReached()) {
 
         /* try to send the notification. if it is successful, increment the count. otherwise log the failure */
-        try {
-          const smsService = await this.smsService;
-          await smsService.sendSmsNotification(parsedSummary.message, phoneNumber);
-          this.sentCount++;
-          return `SMS sent to ${phoneNumber}: ${parsedSummary.message}`;
-        } catch (err) {
-          return `SMS to ${phoneNumber} failed: ${JSON.stringify(err)}`;
-        }
+        const smsService = await this.smsService;
+        await smsService!.sendTextMessage(eventInfo.textMessage, eventInfo.phoneNumber);
+        this.sentCount++;
+        return `SMS sent to ${eventInfo.textMessage}: ${eventInfo.textMessage}`;
+
       }
-      return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.cfg.sms.monthlyQuota})`;
+      return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.config.sms.monthlyQuota})`;
+    } catch (err) {
+      return err;
     }
-    return `Non-notification event: ${event.summary}`;
   }
 
-  private parseEventSummary(eventSummary: string): { contactName: string, message: string } | null {
+  private readEventInfo(event: calendar_v3.Schema$Event): EventInfo {
+
+    let contactId;
+    let contactName;
+    let eventName;
+
+    if (!event.summary) {
+      throw new Error('Event has no summary');
+    }
 
     /* if we can parse the summary, return the contactName and the stripped message */
-    const captureGroups = EVENT_SUMMARY_REGEX.exec(eventSummary);
+    const captureGroups = EVENT_SUMMARY_REGEX.exec(event.summary);
     if (captureGroups) {
-      return {
-        contactName: captureGroups[1],
-        message: eventSummary.replace(EVENT_SUMMARY_REGEX, '')
-      };
+      contactName = captureGroups[1];
+      contactId = contactName.toLowerCase();
+      eventName = event.summary.replace(EVENT_SUMMARY_REGEX, '');
+    } else {
+      throw 'Non-notification event';
     }
 
-    /* otherwise return null */
-    return null;
-  }
+    if (!this.phoneBook.hasOwnProperty(contactId)) {
+      throw new Error(`No phone number for ${contactName}`);
+    }
 
-  async finalize(): Promise<AppContext> {
-    AppContext.log.info('Finalizing...');
-    await Promise.all([
-      this.emailService.then(emailService => emailService.sendSummaryEmail(this.toEmailHtml(this.appEvents))),
-      this.auth.then(auth => this.updateTokenOnRefresh(auth.credentials))
-    ])
-    return this;
+    return {
+      contactName: contactName,
+      textMessage: this.toTextMessage(event, {
+        eventSummary: eventName,
+        recipientName: contactName,
+        smsReplyTo: this.config.sms.replyTo
+      }),
+      eventName: eventName,
+      phoneNumber: this.phoneBook[contactId]
+    };
   }
 
   private async updateTokenOnRefresh(auth: Credentials): Promise<string> {
     if (auth && auth.id_token && auth.access_token && auth.expiry_date && auth.refresh_token) {
       try {
-        await this.googleTokenDb.saveToken({
+        await this.googleTokenDb!.saveToken({
           access_token: auth.access_token,
           expiry_date: auth.expiry_date,
           refresh_token: auth.refresh_token
@@ -208,11 +233,49 @@ export class AppContext {
   }
 
   /**
-   * Generates a string summary
-   * 
-   * @param {object} log An array of logs 
+   * Generates an HTML summary of the application events
+   * @param appEvents The application events to summarize
    */
-  private toEmailHtml(log: string[]) {
-    return `<h1>${log[0]}</h1><ul>${log.slice(1).map(item => `<li>${item}</li>`).join('')}</ul>`;
+  private summarizeAppEvents(appEvents: string[]): string {
+    return `<h1>Summary for ${moment()}</h1><ul>${appEvents.map(item => `<li>${item}</li>`).join('')}</ul>`;
+  }
+
+  /**
+   * Generates a message for an event in a given timeZone, limiting the characters
+   * 
+   * @param event A Google Calendar event
+   * @param tmplVars The template variables to use when interpolating the message template
+   */
+  private toTextMessage(event: calendar_v3.Schema$Event, tmplVars: { [key: string]: string }): string {
+    let start,
+      timeZone = event.start!.timeZone!;
+    if (event.start!.date) {
+
+      /* an all day event */
+      start = moment.tz(event.start!.date, 'YYYY-MM-DD', timeZone).startOf('day');
+    } else {
+      start = moment(event.start!.dateTime, moment.ISO_8601).tz(timeZone);
+    }
+    return this.interpolate(this.config.sms.template, Object.assign({
+      date: start.format(this.config.sms.dateFormat),
+      time: start.format(this.config.sms.timeFormat)
+    }, tmplVars)).substr(0, this.config.sms.maxChars);
+  }
+
+  /**
+   * Attempt variable substitution in a template
+   * 
+   * @param tmpl The template with variables to replace
+   * @param tmplVars A map of template variable names to values
+   * @returns The template with variable names replaced with variable values, or '?' if the 
+   *   variable value was not available
+   */
+  interpolate(tmpl: string, tmplVars: { [key: string]: string }): string {
+    var matches,
+      ret = tmpl;
+    while ((matches = TMPL_VAR_REGEX.exec(tmpl)) !== null) {
+      ret = ret.replace(matches[0], tmplVars[matches[1]] || '?');
+    }
+    return ret;
   }
 }

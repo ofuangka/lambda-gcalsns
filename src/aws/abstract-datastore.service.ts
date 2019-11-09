@@ -1,6 +1,5 @@
 import { DynamoDB } from "aws-sdk";
 
-
 /**
  * This class handles converting between consumer objects and the objects DynamoDB expects 
  */

@@ -2,7 +2,8 @@
 import { DynamoDB } from "aws-sdk";
 
 import { AbstractDatastoreService } from "./abstract-datastore.service";
-import { Logger } from "../logger";
+import { Logger } from "../util/logger";
+import { AppContext } from "../app-ctx";
 
 const TOKEN_TABLE = 'Token',
   GOOGLE_AUTH_TOKEN_ID = 'gcalsns-google';
@@ -18,10 +19,11 @@ export interface GoogleAuthToken {
  */
 export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<GoogleAuthToken> {
 
-  private static log = Logger.getLogger('GoogleAuthTokenDatastoreService');
+  private log: Logger;
 
-  constructor(dynamodb: DynamoDB.DocumentClient) {
+  constructor(dynamodb: DynamoDB.DocumentClient, context: AppContext) {
     super(TOKEN_TABLE, dynamodb);
+    this.log = context.getLogger('GoogleAuthTokenDatastoreService');
   }
 
   protected toKey(s: string): DynamoDB.DocumentClient.Key {
@@ -40,7 +42,7 @@ export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<Go
    * Retrieves the token from the datastore
    */
   getToken(): Promise<GoogleAuthToken> {
-    GoogleAuthTokenDatastoreService.log.info(`Retrieving GoogleAuthToken...`);
+    this.log.info(`Retrieving GoogleAuthToken...`);
     return this.getById(GOOGLE_AUTH_TOKEN_ID);
   }
 
@@ -48,7 +50,7 @@ export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<Go
    * Saves the token into the datastore
    */
   saveToken(token: GoogleAuthToken): Promise<GoogleAuthToken> {
-    GoogleAuthTokenDatastoreService.log.info(`Saving GoogleAuthToken...`);
+    this.log.info(`Saving GoogleAuthToken...`);
     return this.save(token);
   }
 }

@@ -1,23 +1,39 @@
+import { Handler } from 'aws-lambda';
 
-import { AppCfg } from './app-cfg';
+import { LoggerFactory } from './util/logger';
 import { AppContext } from './app-ctx';
-import { Logger } from './logger';
 
-export const handler = function () {
+function main(context: AppContext): Promise<void | string> {
+  return context.initialize()
+    .then(ctx => ctx.fetchData())
+    .then(ctx => ctx.processEvents())
+    .then(ctx => ctx.finalize())
+    .then(results => results.join("\n"))
+    .catch(err => console.error(err));
+}
+
+function createAppContext(config: any): AppContext {
+  return new AppContext(config,
+    LoggerFactory.getInstance(config.verbose)
+      .info('Starting handler...')
+      .verbose('Configuration', config));
+}
+
+export const handler: Handler = () => {
 
   /**
    * Read in the configuration values from the execution environment
    */
-  const appCfg: AppCfg = {
-    verbose: !!process.env.IS_VERBOSE,
+  return main(createAppContext({
+    verbose: process.env.IS_VERBOSE === 'true',
     email: {
-      enabled: !!process.env.IS_EMAIL_ENABLED,
+      enabled: process.env.IS_EMAIL_ENABLED === 'true',
       from: process.env.EMAIL_FROM || 'do-not-reply@domain.com',
       subject: process.env.EMAIL_SUBJECT || 'SMS Notifications',
       recipients: process.env.EMAIL_RECIPIENTS || ''
     },
     sms: {
-      enabled: !!process.env.IS_SMS_ENABLED,
+      enabled: process.env.IS_SMS_ENABLED === 'true',
       replyTo: process.env.SMS_REPLY_TO || '',
       monthlyQuota: process.env.SMS_MONTHLY_QUOTA ? parseInt(process.env.SMS_MONTHLY_QUOTA) : 100,
       maxChars: process.env.SMS_MAX_CHARS ? parseInt(process.env.SMS_MAX_CHARS) : 140,
@@ -38,15 +54,5 @@ export const handler = function () {
       contactsId: process.env.CONTACTS_SHEETS_ID || '',
       spreadsheetRange: 'A:B',
     }
-  };
-
-  Logger.setVerbose(appCfg.verbose);
-  const log = Logger.getLogger('main');
-  log.info('Starting handler...');
-  log.verbose('appCfg:', appCfg);
-  new AppContext(appCfg)
-    .fetchData()
-    .then(ctx => ctx.processEvents())
-    .then(ctx => ctx.finalize())
-    .catch(err => console.error(err));
+  }));
 };

@@ -6,6 +6,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "webpack",
+    "predeploy": "command -v aws>/dev/null 2>&1 || echo \"You must have aws-cli installed and configured to deploy\"",
     "deploy": "aws lambda update-function-code --function-name gcalsns --zip-file fileb://dist/gcalsns.zip",
     "start": "npm run clean && npm run build && npm run deploy",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -25,6 +26,7 @@
     "@types/moment-timezone": "^0.5.12",
     "@types/node": "^11.13.4",
     "@types/webpack": "^4.4.27",
+    "@types/aws-lambda": "^8.10.3",
     "aws-sdk": "^2.437.0",
     "google-auth-library": "^3.1.2",
     "googleapis": "^39.2.0",

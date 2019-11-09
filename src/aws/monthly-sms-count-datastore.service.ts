@@ -3,8 +3,8 @@ import { DynamoDB } from 'aws-sdk';
 import moment from 'moment-timezone';
 
 import { AbstractDatastoreService } from "./abstract-datastore.service";
-import { Logger } from '../logger';
-import { AppCfg } from '../app-cfg';
+import { Logger } from '../util/logger';
+import { AppContext } from '../app-ctx';
 
 const MONTHLY_SMS_COUNT_TABLE = 'MonthNotificationCount',
   MONTH_FORMAT = 'YYYY-MM';
@@ -18,12 +18,13 @@ interface MonthCountPair {
 }
 export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<MonthCountPair> {
 
-  private static log = Logger.getLogger('MonthlySmsCountDatastoreService');
+  private log: Logger;
 
   private now = moment();
 
-  constructor(dynamodb: DynamoDB.DocumentClient, private cfg: AppCfg) {
+  constructor(dynamodb: DynamoDB.DocumentClient, private context: AppContext) {
     super(MONTHLY_SMS_COUNT_TABLE, dynamodb);
+    this.log = context.getLogger('MonthlySmsCountDatastoreService');
   }
 
   protected toKey(id: string): DynamoDB.DocumentClient.Key {
@@ -56,7 +57,7 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
    * Gets the count for the current month
    */
   getCurrentCount(): Promise<number> {
-    MonthlySmsCountDatastoreService.log.info('Getting current count...');
+    this.log.info('Getting current count...');
     return this.getCountByMonth(this.now);
   }
 
@@ -65,20 +66,20 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
    * @param count The new count
    * @param month The month to save to
    */
-  private async updateCountByMonth(count: number, month: moment.Moment): Promise<MonthCountPair> {
+  private updateCountByMonth(count: number, month: moment.Moment): Promise<MonthCountPair> {
 
-    MonthlySmsCountDatastoreService.log.info('Saving updated count...', this.cfg.sms.enabled ? '-Production-' : '-Simulation-');
-    MonthlySmsCountDatastoreService.log.verbose(`count: ${count}`);
-    MonthlySmsCountDatastoreService.log.verbose(`month: ${month}`);
+    this.log.info(`Saving updated count ${count} for ${month}...`, this.context.config.sms.enabled ? '-Production-' : '-Simulation-');
+    this.log.verbose(`count: ${count}`);
+    this.log.verbose(`month: ${month}`);
 
     let newDbEntry: MonthCountPair = {
       month: month.format(MONTH_FORMAT),
       count: count
     };
-    if (this.cfg.sms.enabled) {
-      return await this.save(newDbEntry);
+    if (this.context.config.sms.enabled) {
+      return this.save(newDbEntry);
     }
-    return newDbEntry;
+    return Promise.resolve(newDbEntry);
   }
 
   /**
