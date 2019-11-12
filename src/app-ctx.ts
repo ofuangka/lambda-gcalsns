@@ -115,7 +115,8 @@ export class AppContext {
       this.contactsService!.getContacts(this.config.google.contactsId)
         .then(phoneBook => this.phoneBook = phoneBook),
       this.scheduleService!.getTodaysEvents(this.config.google.calendarId)
-        .then(todaysEvents => this.todaysEvents = todaysEvents)
+        .then(todaysEvents => this.todaysEvents = todaysEvents),
+      this.smsCountDb!.getCurrentCount().then(count => this.oldCount = count)
     ]);
     return this;
   }
@@ -168,10 +169,11 @@ export class AppContext {
       if (!this.monthlyQuotaReached()) {
 
         /* try to send the notification. if it is successful, increment the count. otherwise log the failure */
-        const smsService = await this.smsService;
-        await smsService!.sendTextMessage(eventInfo.textMessage, eventInfo.phoneNumber);
-        this.sentCount++;
-        return `SMS sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}`;
+        const sent = await this.smsService!.sendTextMessage(eventInfo.textMessage, eventInfo.phoneNumber);
+        if (sent) {
+          this.sentCount++;
+        }
+        return `SMS ${sent ? 'sent' : 'prevented'} to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}`;
 
       }
       return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.config.sms.monthlyQuota})`;

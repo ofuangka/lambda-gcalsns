@@ -69,8 +69,6 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
   private updateCountByMonth(count: number, month: moment.Moment): Promise<MonthCountPair> {
 
     this.log.info(`Saving updated count ${count} for ${month}...`, this.context.config.sms.enabled ? '-Production-' : '-Simulation-');
-    this.log.verbose(`count: ${count}`);
-    this.log.verbose(`month: ${month}`);
 
     let newDbEntry: MonthCountPair = {
       month: month.format(MONTH_FORMAT),
