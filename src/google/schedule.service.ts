@@ -25,7 +25,7 @@ export class ScheduleService {
    * @param {string} calendarId The calendar to retrieve
    */
   private getCalendar(calendarId: string): Promise<calendar_v3.Schema$Calendar> {
-    this.log.verbose(`Google Calendar request for ${calendarId}...`);
+    this.log.verbose(`Requesting Google Calendar ID ${calendarId}...`);
     return this.gcal.calendars.get({
       calendarId: calendarId
 
@@ -41,10 +41,7 @@ export class ScheduleService {
    * @param {string} end The timeMax, in ISOString format
    */
   getEvents(calendarId: string, start: string, end: string): Promise<calendar_v3.Schema$Event[]> {
-    this.log.info(`Retrieving events...`);
-    this.log.verbose(`calendarId: ${calendarId}`);
-    this.log.verbose(`start: ${start}`);
-    this.log.verbose(`end: ${end}`);
+    this.log.info(`Retrieving calendar events from ${start} to ${end}...`);
     return this.gcal.events.list({
       calendarId: calendarId,
       timeMin: start,

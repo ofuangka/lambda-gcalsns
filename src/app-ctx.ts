@@ -126,7 +126,7 @@ export class AppContext {
   async processEvents(): Promise<AppContext> {
     this.log.info(`Processing events...`);
     if (!this.todaysEvents || !this.phoneBook) {
-      throw new Error(`processData() without events or phoneBook, was fetchData() called? (phoneBook: ${this.phoneBook}, todaysEvents ${this.todaysEvents})`);
+      throw new Error(`processData() without events or phoneBook, was fetchData() called?`);
     }
     if (this.todaysEvents.length > 0) {
       return Promise.all(this.todaysEvents
@@ -160,7 +160,7 @@ export class AppContext {
   }
 
   private async processEvent(event: calendar_v3.Schema$Event): Promise<string> {
-    this.log.verbose(`Processing ${event.summary}...`);
+    this.log.verbose(`Event summary '${event.summary}'...`);
     try {
       const eventInfo = this.readEventInfo(event);
 
@@ -171,7 +171,7 @@ export class AppContext {
         const smsService = await this.smsService;
         await smsService!.sendTextMessage(eventInfo.textMessage, eventInfo.phoneNumber);
         this.sentCount++;
-        return `SMS sent to ${eventInfo.textMessage}: ${eventInfo.textMessage}`;
+        return `SMS sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}`;
 
       }
       return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.config.sms.monthlyQuota})`;
@@ -197,7 +197,7 @@ export class AppContext {
       contactId = contactName.toLowerCase();
       eventName = event.summary.replace(EVENT_SUMMARY_REGEX, '');
     } else {
-      throw 'Non-notification event';
+      throw `Non-notification event: ${event.summary}`;
     }
 
     if (!this.phoneBook.hasOwnProperty(contactId)) {

@@ -18,7 +18,6 @@ export class ContactsService {
 
   getContacts(sheetsId: string): Promise<{ [key: string]: string }> {
     this.log.info(`Retrieving contacts...`);
-    this.log.verbose(`sheetsId: ${sheetsId}`);
     return this.getSheetRange(sheetsId).then(range => this.parseContacts(range));
   }
 
@@ -28,17 +27,18 @@ export class ContactsService {
    * @param range {object} A google ValueRange 
    */
   private parseContacts(range: sheets_v4.Schema$ValueRange): { [key: string]: string } {
+    this.log.info("Parsing contacts...")
     var ret: { [key: string]: string } = {};
     (range.values || [])
       .forEach(columns => {
         ret[columns[0].trim().toLowerCase()] = this.formatPhone(columns[1]);
       });
-    this.log.verbose('parseContacts:', ret);
+    this.log.verbose('Parsed contacts:', ret);
     return ret;
   }
 
   private getSheetRange(sheetsId: string): Promise<sheets_v4.Schema$ValueRange> {
-    this.log.verbose(`Google Sheets request for ${sheetsId}...`);
+    this.log.verbose(`Requesting Google Sheet ID ${sheetsId}...`);
     return this.sheets.spreadsheets.values.get({
       spreadsheetId: sheetsId,
       range: this.context.config.google.spreadsheetRange

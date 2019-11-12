@@ -3,8 +3,10 @@
  */
 export interface Logger {
 
+  verbose: (...args: any[]) => Logger,
   info: (...args: any[]) => Logger,
-  verbose: (...args: any[]) => Logger
+  warn: (...args: any[]) => Logger,
+  error: (...args: any[]) => Logger
 }
 
 /**
@@ -12,7 +14,7 @@ export interface Logger {
  */
 export class LoggerFactory implements Logger {
 
-  private static DEFAULT_LOGGER = "main";
+  private static DEFAULT_LOGGER = "Global";
   private static instance: LoggerFactory;
 
   /**
@@ -57,6 +59,15 @@ export class LoggerFactory implements Logger {
   }
 
   /**
+   * Convenience method that logs verbose content to the default logger
+   * @param args The content to log
+   */
+  verbose(...args: any[]): LoggerFactory {
+    this.loggers[LoggerFactory.DEFAULT_LOGGER].verbose(args);
+    return this;
+  }
+
+  /**
    * Convenience method that logs info content to the default logger
    * @param args The content to log
    */
@@ -66,11 +77,20 @@ export class LoggerFactory implements Logger {
   }
 
   /**
-   * Convenience method that logs verbose content to the default logger
+   * Convenience method that logs warning content to the default logger
    * @param args The content to log
    */
-  verbose(...args: any[]): LoggerFactory {
-    this.loggers[LoggerFactory.DEFAULT_LOGGER].verbose(args);
+  warn(...args: any[]): LoggerFactory {
+    this.loggers[LoggerFactory.DEFAULT_LOGGER].warn(args);
+    return this;
+  }
+
+  /**
+   * Convenience method that logs warning content to the default logger
+   * @param args The content to log
+   */
+  error(...args: any[]): LoggerFactory {
+    this.loggers[LoggerFactory.DEFAULT_LOGGER].error(args);
     return this;
   }
 }
@@ -88,6 +108,17 @@ class DefaultLogger implements Logger {
   constructor(private prefix: string, private enableVerbose: boolean) { }
 
   /**
+   * Logs verbose content
+   * @param args The content to log
+   */
+  verbose(...args: any[]): Logger {
+    if (this.enableVerbose) {
+      console.debug(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+    }
+    return this;
+  }
+
+  /**
    * Logs info content
    * @param args The content to log
    */
@@ -97,13 +128,20 @@ class DefaultLogger implements Logger {
   }
 
   /**
-   * Logs verbose content
+   * Logs info content
    * @param args The content to log
    */
-  verbose(...args: any[]): Logger {
-    if (this.enableVerbose) {
-      this.info(args);
-    }
+  warn(...args: any[]): Logger {
+    console.warn(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+    return this;
+  }
+
+  /**
+   * Logs info content
+   * @param args The content to log
+   */
+  error(...args: any[]): Logger {
+    console.error(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
     return this;
   }
 }

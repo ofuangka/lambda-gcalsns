@@ -25,7 +25,7 @@ export class SmsService {
    * @param {string} phoneNumber The phone number to send to (only US phone numbers supported)
    */
   sendTextMessage(message: string, phoneNumber: string): Promise<string> {
-    this.log.info(`Sending SMS...`, this.context.config.sms.enabled ? '-Production-' : '-Simulation-');
+    this.log.info(`Sending Text...`, this.context.config.sms.enabled ? '-Production-' : '-Simulation-');
     if (this.context.config.sms.enabled) {
       try {
         const sms = {
@@ -38,13 +38,12 @@ export class SmsService {
             }
           }
         };
-        this.log.verbose(`Sending SNS object ${sms}...`);
-        return this.sns.publish(sms).promise().then(result => `Sent SMS with MessageId ${result.MessageId}`);
+        return this.sns.publish(sms).promise().then(result => `Sent SMS ${result.MessageId} to ${phoneNumber}: ${message}`);
       } catch (err) {
-        this.log.info(`Error when sending SNS object: ${err}`);
+        this.log.info(`Error when sending SNS object: ${JSON.stringify(err)}`);
         throw err;
       }
     }
-    return Promise.resolve('SMS sending is currently disabled');
+    return Promise.resolve(`Disabled SMS to ${phoneNumber}: ${message}`);
   }
 }

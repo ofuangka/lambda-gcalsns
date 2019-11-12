@@ -40,7 +40,7 @@ export class EmailService {
    */
   sendHtmlEmail(html: string): Promise<string> {
     this.log.info(`Sending email...`, this.context.config.email.enabled ? '-Production-' : '-Simulation-');
-    this.log.verbose(`summary: ${html}`);
+    this.log.verbose(`Email: ${html}`);
 
     if (!Array.isArray(this.recipients) || this.recipients.length == 0) {
       return Promise.resolve('No email recipients, skipping email send');
