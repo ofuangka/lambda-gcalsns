@@ -1,7 +1,7 @@
 import { Handler } from 'aws-lambda';
 
 import { LoggerFactory } from './util/logger';
-import { AppContext } from './app-ctx';
+import { AppContext, AppConfig } from './app-ctx';
 
 function main(context: AppContext): Promise<void | string> {
   return context.initialize()
@@ -12,7 +12,7 @@ function main(context: AppContext): Promise<void | string> {
     .catch(err => console.error(err));
 }
 
-function createAppContext(config: any): AppContext {
+function createAppContext(config: AppConfig): AppContext {
   return new AppContext(config,
     LoggerFactory.getInstance(config.verbose)
       .info('Starting handler...')
@@ -37,8 +37,6 @@ export const handler: Handler = () => {
       replyTo: process.env.SMS_REPLY_TO || '',
       monthlyQuota: process.env.SMS_MONTHLY_QUOTA ? parseInt(process.env.SMS_MONTHLY_QUOTA) : 100,
       maxChars: process.env.SMS_MAX_CHARS ? parseInt(process.env.SMS_MAX_CHARS) : 140,
-      dateFormat: process.env.FRIENDLY_DATE_FORMAT || 'ddd, MMM Do',
-      timeFormat: process.env.FRIENDLY_TIME_FORMAT || 'h:mma',
       template: process.env.SMS_MESSAGE_TMPL || 'This message is to confirm {{ eventSummary }} on {{ date }} at {{ time }} for {{ recipientName }}. Please confirm by texting {{ smsReplyTo }} directly.'
     },
     aws: {
@@ -53,6 +51,11 @@ export const handler: Handler = () => {
       redirectUrl: process.env.GOOGLE_REDIRECT_URL || '',
       contactsId: process.env.CONTACTS_SHEETS_ID || '',
       spreadsheetRange: 'A:B',
+    },
+    time: {
+      defaultTimeZone: process.env.DEFAULT_TIMEZONE || 'US/Eastern',
+      dateFormat: process.env.FRIENDLY_DATE_FORMAT || 'ddd, MMM Do',
+      timeFormat: process.env.FRIENDLY_TIME_FORMAT || 'h:mma'
     }
   }));
 };

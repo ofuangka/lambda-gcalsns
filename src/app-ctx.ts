@@ -3,7 +3,7 @@ import { DynamoDB } from "aws-sdk";
 import { Credentials, OAuth2Client } from "google-auth-library";
 import moment from 'moment-timezone';
 import { MonthlySmsCountDatastoreService } from "./aws/monthly-sms-count-datastore.service";
-import { GoogleAuthToken, GoogleAuthTokenDatastoreService } from "./aws/google-auth-token-datastore.service";
+import { GoogleAuthTokenDatastoreService } from "./aws/google-auth-token-datastore.service";
 import { EmailService } from "./aws/email.service";
 import { SmsService } from "./aws/sms.service";
 import { Logger, LoggerFactory } from "./util/logger";
@@ -15,7 +15,7 @@ const TMPL_VAR_REGEX = /\{\{\s*([A-Z0-9_]+)\s*\}\}/ig;
 
 type PhoneBook = { [key: string]: string };
 
-interface AppConfig {
+export interface AppConfig {
   verbose: boolean,
   email: {
     enabled: boolean,
@@ -28,8 +28,6 @@ interface AppConfig {
     replyTo: string,
     monthlyQuota: number,
     maxChars: number,
-    dateFormat: string,
-    timeFormat: string,
     template: string
   },
   aws: {
@@ -44,6 +42,11 @@ interface AppConfig {
     redirectUrl: string,
     contactsId: string,
     spreadsheetRange: string,
+  },
+  time: {
+    defaultTimeZone: string,
+    dateFormat: string,
+    timeFormat: string
   }
 }
 
@@ -111,20 +114,26 @@ export class AppContext {
    */
   async fetchData(): Promise<AppContext> {
     this.log.info(`Fetching data...`);
-    await Promise.all([
-      this.contactsService!.getContacts(this.config.google.contactsId)
-        .then(phoneBook => this.phoneBook = phoneBook),
-      this.scheduleService!.getTodaysEvents(this.config.google.calendarId)
-        .then(todaysEvents => this.todaysEvents = todaysEvents),
-      this.smsCountDb!.getCurrentCount().then(count => this.oldCount = count)
-    ]);
+    try {
+      await Promise.all([
+        this.contactsService!.getContacts(this.config.google.contactsId)
+          .then(phoneBook => this.phoneBook = phoneBook),
+        this.scheduleService!.getCalendar(this.config.google.calendarId)
+          .then(calendar => this.scheduleService!.getTodaysEvents(calendar))
+          .then(todaysEvents => this.todaysEvents = todaysEvents),
+        this.smsCountDb!.getCurrentCount().then(count => this.oldCount = count)
+      ]);
+    } catch (err) {
+      this.log.error(`Fetch data failed.`);
+      throw err;
+    }
     return this;
   }
 
   /**
    * Processes the events
    */
-  async processEvents(): Promise<AppContext> {
+  processEvents(): Promise<AppContext> {
     this.log.info(`Processing events...`);
     if (!this.todaysEvents || !this.phoneBook) {
       throw new Error(`processData() without events or phoneBook, was fetchData() called?`);
@@ -136,10 +145,13 @@ export class AppContext {
         .then(() => this);
     }
     this.appEvents.push(`No upcoming events for today`);
-    return this;
+    return Promise.resolve(this);
   }
 
-  async finalize(): Promise<string[]> {
+  /**
+   * Finish up
+   */
+  finalize(): Promise<string[]> {
     this.log.info('Finalizing...');
     return Promise.all([
       this.smsCountDb!.updateCount(this.oldCount + this.sentCount).then(result => `Stored updated ${result.month} SMS count ${result.count}`),
@@ -239,7 +251,7 @@ export class AppContext {
    * @param appEvents The application events to summarize
    */
   private summarizeAppEvents(appEvents: string[]): string {
-    return `<h1>Summary for ${moment()}</h1><ul>${appEvents.map(item => `<li>${item}</li>`).join('')}</ul>`;
+    return `<h1>Summary for ${moment().tz(this.config.time.defaultTimeZone).format(this.config.time.dateFormat)}</h1><ul>${appEvents.map(item => `<li>${item}</li>`).join('')}</ul>`;
   }
 
   /**
@@ -259,8 +271,8 @@ export class AppContext {
       start = moment(event.start!.dateTime, moment.ISO_8601).tz(timeZone);
     }
     return this.interpolate(this.config.sms.template, Object.assign({
-      date: start.format(this.config.sms.dateFormat),
-      time: start.format(this.config.sms.timeFormat)
+      date: start.format(this.config.time.dateFormat),
+      time: start.format(this.config.time.timeFormat)
     }, tmplVars)).substr(0, this.config.sms.maxChars);
   }
 

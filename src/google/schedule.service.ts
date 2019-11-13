@@ -21,10 +21,9 @@ export class ScheduleService {
 
   /**
    * Retrieves a Google Calendar
-   * 
    * @param {string} calendarId The calendar to retrieve
    */
-  private getCalendar(calendarId: string): Promise<calendar_v3.Schema$Calendar> {
+  getCalendar(calendarId: string): Promise<calendar_v3.Schema$Calendar> {
     this.log.verbose(`Requesting Google Calendar ID ${calendarId}...`);
     return this.gcal.calendars.get({
       calendarId: calendarId
@@ -35,7 +34,6 @@ export class ScheduleService {
 
   /**
    * Lists the events of a Google Calendar for a given time period
-   * 
    * @param {string} calendarId The calendar to retrieve events for
    * @param {string} start The timeMin, in ISOString format
    * @param {string} end The timeMax, in ISOString format
@@ -58,20 +56,17 @@ export class ScheduleService {
       .then(data => data.items || []);
   }
 
-  getTodaysEvents(calendarId: string): Promise<calendar_v3.Schema$Event[]> {
+  /**
+   * Retrieves events for the current day
+   * @param calendar The calendar to retrieve events from
+   */
+  getTodaysEvents(calendar: calendar_v3.Schema$Calendar): Promise<calendar_v3.Schema$Event[]> {
     this.log.info(`Getting today's events...`);
-    this.log.verbose(`calendarId: ${calendarId}`);
-    return this.getCalendar(calendarId)
-      .then(calendar => calendar.timeZone || 'US/Eastern')
-      .then(timeZone => ({ timeZone: timeZone, nowTz: this.context.appStart.tz(timeZone) }))
-      .then(result => ({
-        timeZone: result.timeZone,
-        ymd: [result.nowTz.year(), result.nowTz.month(), result.nowTz.date()]
-      }))
-      .then(result => ({
-        bod: moment.tz(result.ymd, result.timeZone).startOf('day').toISOString(),
-        eod: moment.tz(result.ymd, result.timeZone).endOf('day').toISOString()
-      }))
-      .then(range => this.getEvents(calendarId, range.bod, range.eod));
+    const timeZone = calendar.timeZone || this.context.config.time.defaultTimeZone;
+    const nowTz = this.context.appStart.tz(timeZone);
+    const ymd = [nowTz.year(), nowTz.month(), nowTz.date()];
+    const bod = moment.tz(ymd, timeZone).startOf('day').toISOString();
+    const eod = moment.tz(ymd, timeZone).endOf('day').toISOString();
+    return this.getEvents(calendar.id!, bod, eod);
   }
 }
