@@ -12,9 +12,8 @@ export interface Logger {
 /**
  * LoggerFactory creates Loggers
  */
-export class LoggerFactory implements Logger {
+export class LoggerFactory {
 
-  private static DEFAULT_LOGGER = "Global";
   private static instance: LoggerFactory;
 
   /**
@@ -40,9 +39,6 @@ export class LoggerFactory implements Logger {
    * verbose logging enabled
    */
   constructor(private enableVerbose: boolean) {
-
-    /* create a new default logger */
-    this.loggers[LoggerFactory.DEFAULT_LOGGER] = new DefaultLogger(LoggerFactory.DEFAULT_LOGGER, enableVerbose);
   }
 
   /**
@@ -56,42 +52,6 @@ export class LoggerFactory implements Logger {
       this.loggers[id] = new DefaultLogger(id, this.enableVerbose);
     }
     return this.loggers[id];
-  }
-
-  /**
-   * Convenience method that logs verbose content to the default logger
-   * @param args The content to log
-   */
-  verbose(...args: any[]): LoggerFactory {
-    this.loggers[LoggerFactory.DEFAULT_LOGGER].verbose(args);
-    return this;
-  }
-
-  /**
-   * Convenience method that logs info content to the default logger
-   * @param args The content to log
-   */
-  info(...args: any[]): LoggerFactory {
-    this.loggers[LoggerFactory.DEFAULT_LOGGER].info(args);
-    return this;
-  }
-
-  /**
-   * Convenience method that logs warning content to the default logger
-   * @param args The content to log
-   */
-  warn(...args: any[]): LoggerFactory {
-    this.loggers[LoggerFactory.DEFAULT_LOGGER].warn(args);
-    return this;
-  }
-
-  /**
-   * Convenience method that logs warning content to the default logger
-   * @param args The content to log
-   */
-  error(...args: any[]): LoggerFactory {
-    this.loggers[LoggerFactory.DEFAULT_LOGGER].error(args);
-    return this;
   }
 }
 
@@ -113,7 +73,7 @@ class DefaultLogger implements Logger {
    */
   verbose(...args: any[]): Logger {
     if (this.enableVerbose) {
-      console.debug(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+      console.debug(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
     }
     return this;
   }
@@ -123,7 +83,7 @@ class DefaultLogger implements Logger {
    * @param args The content to log
    */
   info(...args: any[]): Logger {
-    console.log(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+    console.log(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
     return this;
   }
 
@@ -132,7 +92,7 @@ class DefaultLogger implements Logger {
    * @param args The content to log
    */
   warn(...args: any[]): Logger {
-    console.warn(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+    console.warn(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
     return this;
   }
 
@@ -141,7 +101,7 @@ class DefaultLogger implements Logger {
    * @param args The content to log
    */
   error(...args: any[]): Logger {
-    console.error(this.prefix, args.map((argument: any) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+    console.error(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
     return this;
   }
 }

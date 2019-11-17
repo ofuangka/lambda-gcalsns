@@ -48,6 +48,7 @@ export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<Go
 
   /**
    * Saves the token into the datastore
+   * @param token The google auth token
    */
   saveToken(token: GoogleAuthToken): Promise<GoogleAuthToken> {
     this.log.info(`Saving GoogleAuthToken...`);

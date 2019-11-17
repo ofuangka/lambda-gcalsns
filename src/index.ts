@@ -1,22 +1,13 @@
 import { Handler } from 'aws-lambda';
-
-import { LoggerFactory } from './util/logger';
 import { AppContext, AppConfig } from './app-ctx';
 
 function main(context: AppContext): Promise<void | string> {
-  return context.initialize()
+  return context.authorize()
     .then(ctx => ctx.fetchData())
     .then(ctx => ctx.processEvents())
     .then(ctx => ctx.finalize())
-    .then(results => results.join("\n"))
+    .then(results => results.join(","))
     .catch(err => console.error(err));
-}
-
-function createAppContext(config: AppConfig): AppContext {
-  return new AppContext(config,
-    LoggerFactory.getInstance(config.verbose)
-      .info('Starting handler...')
-      .verbose('Configuration', config));
 }
 
 export const handler: Handler = () => {
@@ -24,7 +15,7 @@ export const handler: Handler = () => {
   /**
    * Read in the configuration values from the execution environment
    */
-  return main(createAppContext({
+  return main(new AppContext({
     verbose: process.env.IS_VERBOSE === 'true',
     email: {
       enabled: process.env.IS_EMAIL_ENABLED === 'true',

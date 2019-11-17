@@ -1,16 +1,22 @@
-
+import moment from "moment-timezone";
 import { OAuth2Client } from "googleapis-common";
 import { calendar_v3, google } from "googleapis";
-import moment from "moment-timezone";
 import { Logger } from "../util/logger";
 import { AppContext } from "../app-ctx";
 
+/**
+ * Service for working with calendar event information
+ */
 export class ScheduleService {
 
   private gcal: calendar_v3.Calendar;
-
   private log: Logger;
 
+  /**
+   * Constructor
+   * @param auth The OAuth2Client
+   * @param context The application context
+   */
   constructor(auth: OAuth2Client, private context: AppContext) {
     this.log = context.getLogger('ScheduleService');
     this.gcal = google.calendar({
@@ -21,7 +27,7 @@ export class ScheduleService {
 
   /**
    * Retrieves a Google Calendar
-   * @param {string} calendarId The calendar to retrieve
+   * @param calendarId The calendar to retrieve
    */
   getCalendar(calendarId: string): Promise<calendar_v3.Schema$Calendar> {
     this.log.verbose(`Requesting Google Calendar ID ${calendarId}...`);
@@ -34,9 +40,9 @@ export class ScheduleService {
 
   /**
    * Lists the events of a Google Calendar for a given time period
-   * @param {string} calendarId The calendar to retrieve events for
-   * @param {string} start The timeMin, in ISOString format
-   * @param {string} end The timeMax, in ISOString format
+   * @param calendarId The calendar to retrieve events for
+   * @param start The timeMin, in ISOString format
+   * @param end The timeMax, in ISOString format
    */
   getEvents(calendarId: string, start: string, end: string): Promise<calendar_v3.Schema$Event[]> {
     this.log.info(`Retrieving calendar events from ${start} to ${end}...`);
