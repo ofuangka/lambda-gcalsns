@@ -8,8 +8,9 @@ import { AppContext } from "../app-ctx";
  */
 export class EmailService {
 
-  private log: Logger;
+  private static ID = 'EmailService';
 
+  private log: Logger;
   private ses: SES;
   private recipients: string[];
 
@@ -19,7 +20,7 @@ export class EmailService {
    * @param context The application configuration
    */
   constructor(private context: AppContext) {
-    this.log = context.getLogger('EmailService');
+    this.log = context.getLogger(EmailService.ID);
 
     this.ses = new SES({
       region: context.config.aws.region,
@@ -36,16 +37,17 @@ export class EmailService {
    * 
    * @param html The HTML to send
    * 
-   * @returns A Promise containing the result
+   * @returns A promise containing the result
    */
-  sendHtmlEmail(html: string): Promise<string> {
-    this.log.info(`Sending email...`, this.context.config.email.enabled ? '-Production-' : '-Simulation-');
-    this.log.verbose(`Email: ${html}`);
+  async sendHtmlEmail(html: string): Promise<string> {
 
     if (!Array.isArray(this.recipients) || this.recipients.length == 0) {
-      return Promise.resolve('No email recipients, skipping email send');
+      return 'No email recipients, skipping email send.';
     }
-    if (this.context.config.email.enabled) {
+    if (!this.context.config.email.enabled) {
+      return 'Email disabled in config.';
+    } else {
+      this.log.info('Sending email...');
       try {
         const email: SES.SendEmailRequest = {
           Destination: {
@@ -63,13 +65,14 @@ export class EmailService {
           },
           Source: this.context.config.email.from
         };
-        this.log.verbose(`Sending SES object ${email}...`);
-        return this.ses.sendEmail(email).promise()
-          .then(result => result.MessageId ? `SES object sent with MessageId ${result.MessageId}` : `SES object sending failed with result ${JSON.stringify(result)}`);
+        this.log.verbose('SES object:', email);
+        return this.ses.sendEmail(email)
+          .promise()
+          .then(result => `Successfully sent email with MessageId ${result.MessageId}.`);
       } catch (err) {
-        return Promise.resolve(`Error when sending email: ${JSON.stringify(err)}`);
+        this.log.error(`Send email failed.`);
+        throw err;
       }
     }
-    return Promise.resolve("Email disabled in config");
   }
 }

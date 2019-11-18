@@ -28,6 +28,8 @@ export class ScheduleService {
   /**
    * Retrieves a Google Calendar
    * @param calendarId The calendar to retrieve
+   * 
+   * @returns a promise resolving to the calendar
    */
   getCalendar(calendarId: string): Promise<calendar_v3.Schema$Calendar> {
     this.log.verbose(`Requesting Google Calendar ID ${calendarId}...`);
@@ -43,6 +45,8 @@ export class ScheduleService {
    * @param calendarId The calendar to retrieve events for
    * @param start The timeMin, in ISOString format
    * @param end The timeMax, in ISOString format
+   * 
+   * @returns A promise resolving to the array of events
    */
   getEvents(calendarId: string, start: string, end: string): Promise<calendar_v3.Schema$Event[]> {
     this.log.info(`Retrieving calendar events from ${start} to ${end}...`);
@@ -64,7 +68,10 @@ export class ScheduleService {
 
   /**
    * Retrieves events for the current day
+   * 
    * @param calendar The calendar to retrieve events from
+   * 
+   * @returns A promise resolving to an array of todays events
    */
   getTodaysEvents(calendar: calendar_v3.Schema$Calendar): Promise<calendar_v3.Schema$Event[]> {
     this.log.info(`Getting today's events...`);

@@ -58,7 +58,7 @@ export class ContactsService {
         if (contactId && phoneNumber) {
           ret[contactId] = phoneNumber;
         } else {
-          this.log.error(`Could not parse contact row ${JSON.stringify(row)}`);
+          this.log.error('Could not parse contact row:', row);
         }
       });
     this.log.verbose('Parsed contacts:', ret);
@@ -70,6 +70,8 @@ export class ContactsService {
    * 
    * @param sheetRange The sheet range to retrieve
    * @param sheetsId Retrieves a subset of a Google sheet
+   * 
+   * @returns A promise resolving to the spreadsheet range
    */
   private getSheetRange(sheetRange: string, sheetsId: string): Promise<sheets_v4.Schema$ValueRange> {
     this.log.verbose(`Requesting Google Sheet ID ${sheetsId}...`);

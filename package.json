@@ -21,16 +21,16 @@
     "url": "https://github.com/ofuangka/lambda-gcalsns/issues"
   },
   "homepage": "https://github.com/ofuangka/lambda-gcalsns#readme",
-  "dependencies": {},
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.3",
     "@types/moment-timezone": "^0.5.12",
     "@types/node": "^11.13.4",
     "@types/webpack": "^4.4.27",
-    "@types/aws-lambda": "^8.10.3",
     "aws-sdk": "^2.437.0",
     "google-auth-library": "^3.1.2",
     "googleapis": "^39.2.0",
     "moment-timezone": "^0.5.23",
+    "terser-webpack-plugin": "^2.2.1",
     "ts-loader": "^5.3.3",
     "typescript": "^3.4.3",
     "webpack": "^4.30.0",

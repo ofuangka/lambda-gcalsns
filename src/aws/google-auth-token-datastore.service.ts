@@ -8,6 +8,9 @@ import { AppContext } from "../app-ctx";
 const TOKEN_TABLE = 'Token',
   GOOGLE_AUTH_TOKEN_ID = 'gcalsns-google';
 
+/**
+ * Represents the data neeed to authorize with Google
+ */
 export interface GoogleAuthToken {
   access_token: string;
   refresh_token: string;
@@ -19,11 +22,13 @@ export interface GoogleAuthToken {
  */
 export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<GoogleAuthToken> {
 
+  private static ID = 'GoogleAuthTokenDatastoreService';
+
   private log: Logger;
 
   constructor(dynamodb: DynamoDB.DocumentClient, context: AppContext) {
     super(TOKEN_TABLE, dynamodb);
-    this.log = context.getLogger('GoogleAuthTokenDatastoreService');
+    this.log = context.getLogger(GoogleAuthTokenDatastoreService.ID);
   }
 
   protected toKey(s: string): DynamoDB.DocumentClient.Key {
@@ -40,6 +45,7 @@ export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<Go
 
   /**
    * Retrieves the token from the datastore
+   * @returns the token
    */
   getToken(): Promise<GoogleAuthToken> {
     this.log.info(`Retrieving GoogleAuthToken...`);
@@ -49,6 +55,7 @@ export class GoogleAuthTokenDatastoreService extends AbstractDatastoreService<Go
   /**
    * Saves the token into the datastore
    * @param token The google auth token
+   * @returns The saved token
    */
   saveToken(token: GoogleAuthToken): Promise<GoogleAuthToken> {
     this.log.info(`Saving GoogleAuthToken...`);

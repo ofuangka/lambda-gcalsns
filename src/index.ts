@@ -1,5 +1,5 @@
 import { Handler } from 'aws-lambda';
-import { AppContext, AppConfig } from './app-ctx';
+import { AppContext } from './app-ctx';
 
 function main(context: AppContext): Promise<void | string> {
   return context.authorize()

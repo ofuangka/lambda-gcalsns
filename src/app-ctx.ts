@@ -170,6 +170,8 @@ export interface AppConfig {
  */
 export class AppContext {
 
+  private static ID = 'AppContext';
+
   private lf: LoggerFactory;
   private log: Logger;
 
@@ -202,9 +204,9 @@ export class AppContext {
   constructor(public config: AppConfig) {
     this.appStart = moment();
     this.lf = new LoggerFactory(config.verbose);
-    this.log = this.lf.getLogger(AppContext.name);
+    this.log = this.lf.getLogger(AppContext.ID);
     this.log.info('Starting application...');
-    this.log.verbose('Configuration', JSON.stringify(config));
+    this.log.verbose('Configuration:', config);
     this.dynamodb = new DynamoDB.DocumentClient({
       accessKeyId: this.config.aws.accessKeyId,
       region: this.config.aws.region,
@@ -228,7 +230,7 @@ export class AppContext {
    */
   public authorize(): Promise<AppContext> {
     return this.lifecycleEvent(this.authorize.name,
-      this.googleTokenDb.getToken()
+      () => this.googleTokenDb.getToken()
         .then(token => this.authorizeGoogleServices(token))
     );
   }
@@ -240,7 +242,7 @@ export class AppContext {
    * instance when the event completes
    */
   public fetchData(): Promise<AppContext> {
-    return this.lifecycleEvent(this.fetchData.name, Promise.all([
+    return this.lifecycleEvent(this.fetchData.name, () => Promise.all([
       this.contactsService!.getContacts(this.config.google.contactsId)
         .then(phoneBook => this.phoneBook = phoneBook),
       this.scheduleService!.getCalendar(this.config.google.calendarId)
@@ -262,22 +264,26 @@ export class AppContext {
       return Promise.resolve(this);
     }
     return this.lifecycleEvent(this.processEvents.name,
-      Promise.all(this.todaysEvents.map(event => this.processEvent(event)))
+      () => Promise.all(this.todaysEvents.map(event => this.processEvent(event)))
         .then(results => results.forEach(result => this.appEvents.push(result))));
   }
 
   /**
    * Store results and send a summary email
    * 
-   * @returns A promise that resolves with the results of finalizing
+   * @returns A promise that resolves with the finalize results
    */
   public finalize(): Promise<string[]> {
-    return Promise.all([
-      this.smsCountDb.updateCount(this.oldCount + this.sentCount)
-        .then(result => `Stored updated ${result.month} SMS count ${result.count}`),
+    const finalizeItems = [
       this.emailService.sendHtmlEmail(this.summarizeAppEvents(this.appEvents)),
       this.updateTokenOnRefresh(this.auth.credentials)
-    ]);
+    ];
+    if (this.sentCount > 0) {
+      this.log.info('SMS was sent, saving updated count.');
+      finalizeItems.push(this.smsCountDb.updateCount(this.oldCount + this.sentCount)
+        .then(result => `${result.month} SMS count ${result.count} saved.`));
+    }
+    return Promise.all(finalizeItems);
   }
 
   /**
@@ -294,18 +300,18 @@ export class AppContext {
    * Executes a lifecycle event
    * 
    * @param eventName The lifecycle event name
-   * @param promise A promise that resolves when the lifecycle event completes
+   * @param future A function that produces a promise that resolves when the lifecycle event completes
    * 
    * @returns A promise that resolves to this AppContext instance when the lifecycle event completes
    */
-  private async lifecycleEvent(eventName: string, promise: Promise<any>): Promise<AppContext> {
-    this.log.info(`Beginning ${eventName}...`);
+  private async lifecycleEvent(eventName: string, future: () => Promise<any>): Promise<AppContext> {
+    this.log.info(`Beginning ${eventName}()...`);
     try {
-      await promise;
-      this.log.info(`${eventName} successful.`);
+      await future();
+      this.log.info(`${eventName}() successful.`);
       return this;
     } catch (err) {
-      this.log.error(`${eventName} failed.`);
+      this.log.error(`${eventName}() failed.`);
       throw err;
     }
   }
@@ -339,14 +345,14 @@ export class AppContext {
         const sent = await this.smsService.sendTextMessage(eventInfo.textMessage, eventInfo.phoneNumber);
         if (sent) {
           this.sentCount++;
-          return `Text sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}`;
+          return `Text sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}.`;
         }
-        return `Text would have been sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}`;
+        return `Text would have been sent to ${eventInfo.phoneNumber}: ${eventInfo.textMessage}.`;
       } catch (err) {
-        return `An error occurred during while processing ${event.summary}: ${JSON.stringify(err)}`;
+        return err;
       }
     }
-    return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.config.sms.monthlyQuota})`;
+    return `Monthly quota was reached: (${this.oldCount + this.sentCount}/${this.config.sms.monthlyQuota}).`;
   }
 
   /**
@@ -393,7 +399,7 @@ export class AppContext {
     }
 
     if (!this.phoneBook.hasOwnProperty(contactId)) {
-      throw new Error(`No phone number for ${contactName}`);
+      throw new Error(`No phone number for ${contactName}.`);
     }
 
     return {
@@ -421,12 +427,12 @@ export class AppContext {
           expiry_date: auth.expiry_date,
           refresh_token: auth.refresh_token
         });
-        return 'Saved updated GoogleAuthToken';
+        return 'Saved updated GoogleAuthToken.';
       } catch (err) {
-        return `Error saving updated GoogleAuthToken: ${JSON.stringify(err)}`;
+        return `Error saving updated GoogleAuthToken: ${JSON.stringify(err)}.`;
       }
     }
-    return 'No GoogleAuthToken update necessary';
+    return 'No GoogleAuthToken update necessary.';
   }
 
   /**
@@ -451,7 +457,7 @@ export class AppContext {
    */
   private toTextMessage(event: calendar_v3.Schema$Event, tmplVars: { [key: string]: string }): string {
     let start,
-      timeZone = event.start!.timeZone!;
+      timeZone = event.start!.timeZone! || this.config.time.defaultTimeZone;
     if (event.start!.date) {
 
       /* an all day event */

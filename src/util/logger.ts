@@ -1,12 +1,14 @@
+type LoggerRegistry = { [key: string]: Logger };
+
 /**
  * Logger interface
  */
 export interface Logger {
 
-  verbose: (...args: any[]) => Logger,
-  info: (...args: any[]) => Logger,
-  warn: (...args: any[]) => Logger,
-  error: (...args: any[]) => Logger
+  verbose: (...args: any[]) => void,
+  info: (...args: any[]) => void,
+  warn: (...args: any[]) => void,
+  error: (...args: any[]) => void
 }
 
 /**
@@ -22,7 +24,7 @@ export class LoggerFactory {
    * This argument is only honored during the very first 
    * call within an application lifecycle, when the 
    * singleton is generated. Further calls to this method
-   * do not modify the verbosity
+   * do not modify the logging verbosity
    */
   static getInstance(verbose: boolean): LoggerFactory {
     if (!LoggerFactory.instance) {
@@ -31,14 +33,14 @@ export class LoggerFactory {
     return LoggerFactory.instance;
   }
 
-  private loggers: { [key: string]: Logger } = {};
+  private loggers: LoggerRegistry = {};
 
   /**
    * Constructor
-   * @param enableVerbose Whether to generate Loggers with 
+   * @param verbose Whether to generate Loggers with 
    * verbose logging enabled
    */
-  constructor(private enableVerbose: boolean) {
+  constructor(private verbose: boolean) {
   }
 
   /**
@@ -49,7 +51,7 @@ export class LoggerFactory {
    */
   getLogger(id: string): Logger {
     if (!this.loggers.hasOwnProperty(id)) {
-      this.loggers[id] = new DefaultLogger(id, this.enableVerbose);
+      this.loggers[id] = new DefaultLogger(id, this.verbose);
     }
     return this.loggers[id];
   }
@@ -71,37 +73,37 @@ class DefaultLogger implements Logger {
    * Logs verbose content
    * @param args The content to log
    */
-  verbose(...args: any[]): Logger {
+  verbose(...args: any[]): void {
     if (this.enableVerbose) {
-      console.debug(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
+      this.log(console.debug, args);
     }
-    return this;
   }
 
   /**
    * Logs info content
    * @param args The content to log
    */
-  info(...args: any[]): Logger {
-    console.log(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
-    return this;
+  info(...args: any[]): void {
+    this.log(console.log, args);
   }
 
   /**
    * Logs info content
    * @param args The content to log
    */
-  warn(...args: any[]): Logger {
-    console.warn(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
-    return this;
+  warn(...args: any[]): void {
+    this.log(console.warn, args);
   }
 
   /**
    * Logs info content
    * @param args The content to log
    */
-  error(...args: any[]): Logger {
-    console.error(this.prefix, args.map((argument) => typeof (argument === 'object') ? JSON.stringify(argument) : argument));
-    return this;
+  error(...args: any[]): void {
+    this.log(console.error, args);
+  }
+
+  private log(method: (...args: any[]) => void, ...args: any[]): void {
+    method.apply(console, [this.prefix].concat(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : `${arg}`)));
   }
 }

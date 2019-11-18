@@ -6,7 +6,7 @@ import { DynamoDB } from "aws-sdk";
 export abstract class AbstractDatastoreService<ConsumerObject> {
 
   /**
-   * 
+   * Constructor
    * @param tableName The name of the DynamoDB table
    * @param cfg The application config
    */
@@ -26,7 +26,7 @@ export abstract class AbstractDatastoreService<ConsumerObject> {
       .promise()
       .then(response => {
         if (!response || !response.Item) {
-          throw new Error(`Received unexpected fetch response from DynamoDB: ${response}`);
+          throw new Error(`Received unexpected fetch response from DynamoDB: ${JSON.stringify(response)}`);
         } else {
           return this.toType(response.Item);
         }

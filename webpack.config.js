@@ -1,4 +1,5 @@
 const path = require('path');
+const TerserPlugin = require('terser-webpack-plugin');
 const ZipPlugin = require('zip-webpack-plugin');
 
 module.exports = {
@@ -14,6 +15,15 @@ module.exports = {
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.json']
+  },
+  optimization: {
+    minimizer: [new TerserPlugin({
+      terserOptions: {
+        output: {
+          comments: false
+        }
+      }
+    })]
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
