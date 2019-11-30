@@ -14,12 +14,33 @@ Reads Google Calendar event notifications and sends corresponding SNS notificati
   * Google Calendar configuration
   * Google Sheets configuration
 
-## Building/Deploying
-* Install the [AWS cli tool](https://aws.amazon.com/cli/), and configure it with your account information
+## IAM configuration
+In AWS, it is generally poor practice to do everything using your root credentials, so this section describes how to create the necessary Users, Groups and assign the correct Permissions to them to be able to run the application. At a high level, there are 2 principals that will be performing actions requiring AWS permissions. The AWS CLI (command line interface) tool and the Lambda function. They will both be interacting with protected resources, including SNS (text messages), SES (emails), DynamoDB (persistent storage), Cloudwatch (logging) and Lambda.
 
-```bash
-aws configure
-```
+### CLI
+1. Log into the AWS console and navigate to the IAM section > Users section. Choose to create a new User and name it CLI. Select to give it programmatic access. Choose to attach the following policies directly:
+  * AmazonDynamoDBFullAccess
+  * AmazonSESFullAccess
+  * AmazonSNSFullAccess
+  * AWSLambdaFullAccess
+  * CloudWatchEventsFullAccess
+  * CloudWatchLogsFullAccess
+
+2. Leave the remaining options at their defaults and at the confirmation screen, make sure that you copy the Access key ID and _Secret access key_. *This is the only time you will be able to copy the secret access key, so if you forget, you will have to recreate the user.*
+
+### Lambda
+1. Back in the AWS console, navigate to IAM > Roles > Create role. Choose Lambda for the AWS service, and add the following policies to the role:
+  * AmazonDynamoDBFullAccess
+  * AmazonSESFullAccess
+  * AmazonSNSFullAccess
+  * AWSLambdaBasicExecutionRole
+2. Choose default options and name the role "GcalSNS". Provide an appropriate description, e.g. "Allows access to resources necessary for GcalSNS."
+3. Once the role has been created, it should appear in the list of roles. Click the role to view it, and copy the value under "Role ARN". This is the identifier for the role, which will be needed in a later step. It should look something like "arn:aws:iam::XXXXXXXXXX:role/GcalSNS".
+
+### Configuration script
+1. Install the [AWS cli tool](https://aws.amazon.com/cli/).
+2. Open up a terminal window and enter `aws configure`. You'll be prompted for the Access key ID and Secret access key from earlier. For the region, choose the nearest AWS region to your geographical location (`us-east-1`). Choose `json` as your output format.
+3. You should now be able to use the AWS CLI to set up the persistent data structures needed to run GcalSNS. Run the following command from the application source root: `./scripts/configure-aws PRIMARY_EMAIL ROLE_ARN`, where the PRIMARY_EMAIL is the email that will be used as the sender for emails, and ROLE_ARN is the ARN obtained when creating the Role earlier.
 
 * Clone the repo and run npm install
 

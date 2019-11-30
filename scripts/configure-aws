@@ -1,0 +1,83 @@
+#!/bin/bash
+function create_tables() {
+  echo; echo "Creating DynamoDB tables..."
+  aws dynamodb create-table --table-name SmsCount --attribute-definitions AttributeName=Month,AttributeType=S --key-schema AttributeName=Month,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 >>"$LOG_FILE" 2>&1
+  aws dynamodb create-table --table-name AuthToken --attribute-definitions AttributeName=TokenId,AttributeType=S --key-schema AttributeName=TokenId,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 >>"$LOG_FILE" 2>&1
+  echo "DynamoDB tables successfully created.";
+}
+
+function register_emails() {
+  echo; echo "Registering emails..."
+  aws ses verify-email-identity --email "$1" >>"$LOG_FILE" 2>&1
+  echo "Verification emails sent."
+}
+
+function create_events() {
+  echo; echo "Creating events..."
+  aws events put-rule --name 12UTC --schedule-expression "cron(0 12 * * ? *)" --state ENABLED --event-bus-name default >>"$LOG_FILE" 2>&1
+  echo "Events created."
+}
+
+function create_lambda() {
+  echo; echo "Creating lambda..."
+  aws create-function --function-name "gcalsns" --runtime "nodejs10.x" --role "$1" --handler "index.handler" >> "$LOG_FILE" 2>&1
+  echo "Lambda created."
+}
+
+function log() {
+  echo "$(date): $1" >> "$LOG_FILE"
+}
+
+function usage() {
+  echo; echo "Performs AWS configuration needed for Gcalsns." 
+  echo; echo "Usage: $(basename $0) PRIMARY_EMAIL ROLE_ARN"
+  echo; echo "Arguments:"
+  echo -e "\tPRIMARY_EMAIL - The primary email address of the administrator"
+  echo -e "\tROLE_ARN - The ARN for the role that the Lambda function will use" 
+  echo; exit 1
+}
+
+if [ $# -lt 2 ]; then
+  usage
+fi
+
+while getopts "h0123" OPT; do
+  case $OPT in
+    h)
+      usage
+      ;;
+    0)
+      DO_DYNAMODB=1
+      ;;
+    1)
+      DO_EMAIL=1
+      ;;
+    2)
+      DO_EVENTS=1
+      ;;
+    3)
+      DO_LAMBDA=1
+      ;;
+    \?)
+      usage
+      ;;
+  esac
+done
+
+LOG_FILE="$(basename $0).log"
+log "Starting $(basename $0)..."
+trap 'echo; echo "Something went wrong. Please check $LOG_FILE for details"; echo' ERR
+if [ -n $DO_DYNAMODB ]; then
+  create_tables
+fi
+if [ -n $DO_EMAIL ]; then
+  register_emails "$1"
+fi
+if [ -n $DO_EVENTS ]; then
+  create_events
+fi
+if [ -n $DO_LAMBDA ]; then
+  create_lambda $2
+fi
+
+echo; echo "Script completed successfully."; echo
