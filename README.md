@@ -2,6 +2,10 @@
 Reads Google Calendar event notifications and sends corresponding SNS notifications
 
 ## Prerequisites
+* Google account
+  * Google API configuration
+  * Google Calendar configuration
+  * Google Sheets configuration
 * AWS account
   * IAM configuration
   * SNS configuration
@@ -9,11 +13,11 @@ Reads Google Calendar event notifications and sends corresponding SNS notificati
   * DynamoDB configuration
   * Cloudwatch configuration
   * Lambda configuration
-* Google account
-  * Google API configuration
-  * Google Calendar configuration
-  * Google Sheets configuration
 
+## Google configuration
+In order for programmatic access to Google Calendar and Google Sheets, you need to create a Google Cloud platform project to associate authentication information to. Navigate to https://console.cloud.google.com. Choose to create a new project (e.g. GcalSNS).
+
+Once the project is created, you can navigate to the APIs and Services 
 ## IAM configuration
 In AWS, it is generally poor practice to do everything using your root credentials, so this section describes how to create the necessary Users, Groups and assign the correct Permissions to them to be able to run the application. At a high level, there are 2 principals that will be performing actions requiring AWS permissions. The AWS CLI (command line interface) tool and the Lambda function. They will both be interacting with protected resources, including SNS (text messages), SES (emails), DynamoDB (persistent storage), Cloudwatch (logging) and Lambda.
 

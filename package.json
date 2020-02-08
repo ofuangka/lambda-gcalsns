@@ -7,7 +7,7 @@
     "clean": "rm -rf dist",
     "build": "webpack",
     "predeploy": "command -v aws>/dev/null 2>&1 || echo \"You must have aws-cli installed and configured to deploy\"",
-    "deploy": "aws lambda update-function-code --function-name gcalsns --zip-file fileb://dist/gcalsns.zip",
+    "deploy": "aws lambda update-function-code --function-name GcalSns --zip-file fileb://dist/gcalsns.zip",
     "start": "npm run clean && npm run build && npm run deploy",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

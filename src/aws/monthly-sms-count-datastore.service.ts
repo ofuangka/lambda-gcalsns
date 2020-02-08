@@ -6,7 +6,7 @@ import { AbstractDatastoreService } from "./abstract-datastore.service";
 import { Logger } from '../util/logger';
 import { AppContext } from '../app-ctx';
 
-const MONTHLY_SMS_COUNT_TABLE = 'MonthNotificationCount',
+const MONTHLY_SMS_COUNT_TABLE = 'SmsCount',
   MONTH_FORMAT = 'YYYY-MM';
 
 interface MonthCountPair {
@@ -55,7 +55,11 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
    */
   private getCountByMonth(month: moment.Moment): Promise<number> {
     return this.getById(month.format(MONTH_FORMAT))
-      .then(result => result.count);
+      .then(result => result.count)
+      .catch(err => {
+        this.log.error('An error occurred when retrieving the count, substituting 0');
+        return 0;
+      });
   }
 
   /**

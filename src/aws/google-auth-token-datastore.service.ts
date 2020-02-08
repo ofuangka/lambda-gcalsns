@@ -5,7 +5,7 @@ import { AbstractDatastoreService } from "./abstract-datastore.service";
 import { Logger } from "../util/logger";
 import { AppContext } from "../app-ctx";
 
-const TOKEN_TABLE = 'Token',
+const TOKEN_TABLE = 'AuthToken',
   GOOGLE_AUTH_TOKEN_ID = 'gcalsns-google';
 
 /**

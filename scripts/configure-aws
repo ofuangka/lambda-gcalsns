@@ -34,6 +34,12 @@ function usage() {
   echo; echo "Arguments:"
   echo -e "\tPRIMARY_EMAIL - The primary email address of the administrator"
   echo -e "\tROLE_ARN - The ARN for the role that the Lambda function will use" 
+  echo; echo "Options:"
+  echo -e "\t-0 - Create DynamoDB structures"
+  echo -e "\t-1 - Register email"
+  echo -e "\t-2 - Create event"
+  echo -e "\t-3 - Create Lambda"
+  echo -e "\t-A - Do everything"
   echo; exit 1
 }
 
@@ -41,7 +47,7 @@ if [ $# -lt 2 ]; then
   usage
 fi
 
-while getopts "h0123" OPT; do
+while getopts "h0123A" OPT; do
   case $OPT in
     h)
       usage
@@ -58,8 +64,11 @@ while getopts "h0123" OPT; do
     3)
       DO_LAMBDA=1
       ;;
-    \?)
-      usage
+    A)
+      DO_DYNAMODB=1
+      DO_EMAIL=1
+      DO_EVENTS=1
+      DO_LAMBDA=1
       ;;
   esac
 done
