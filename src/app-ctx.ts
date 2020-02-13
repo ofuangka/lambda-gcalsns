@@ -281,7 +281,7 @@ export class AppContext {
     if (this.sentCount > 0) {
       this.log.info('SMS was sent, saving updated count.');
       finalizeItems.push(this.smsCountDb.updateCount(this.oldCount + this.sentCount)
-        .then(result => `${result.month} SMS count ${result.count} saved.`));
+        .then(result => `${result.Month} SMS count ${result.Count} saved.`));
     }
     return Promise.all(finalizeItems);
   }

@@ -10,8 +10,8 @@ const MONTHLY_SMS_COUNT_TABLE = 'SmsCount',
   MONTH_FORMAT = 'YYYY-MM';
 
 interface MonthCountPair {
-  month: string;
-  count: number;
+  Month: string;
+  Count: number;
 }
 
 /**
@@ -34,15 +34,15 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
 
   protected toType(item: DynamoDB.DocumentClient.AttributeMap): MonthCountPair {
     return {
-      month: item.Month,
-      count: isNaN(parseInt(item.Count)) ? 0 : parseInt(item.Count)
+      Month: item.Month,
+      Count: isNaN(parseInt(item.Count)) ? 0 : parseInt(item.Count)
     };
   }
 
   protected toItem(obj: MonthCountPair): DynamoDB.DocumentClient.AttributeMap {
     return {
-      Month: obj.month,
-      Count: obj.count
+      Month: obj.Month,
+      Count: obj.Count
     };
   }
 
@@ -55,9 +55,9 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
    */
   private getCountByMonth(month: moment.Moment): Promise<number> {
     return this.getById(month.format(MONTH_FORMAT))
-      .then(result => result.count)
+      .then(result => result.Count)
       .catch(err => {
-        this.log.error('An error occurred when retrieving the count, substituting 0');
+        this.log.error('An error occurred when retrieving the count, substituting 0', err);
         return 0;
       });
   }
@@ -82,8 +82,8 @@ export class MonthlySmsCountDatastoreService extends AbstractDatastoreService<Mo
    */
   private async updateCountByMonth(count: number, month: moment.Moment): Promise<MonthCountPair> {
     let newDbEntry: MonthCountPair = {
-      month: month.format(MONTH_FORMAT),
-      count: count
+      Month: month.format(MONTH_FORMAT),
+      Count: count
     };
     if (!this.appContext.config.sms.enabled) {
       this.log.info('No need to save updated count when SMS is disabled.');
